@@ -1,7 +1,5 @@
 import asyncio
-import json
-import urllib.request
-import aiosmtplib
+import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -19,14 +17,40 @@ def background_send_otp_email(to_email: str, otp: str, purpose_label: str) -> No
     task.add_done_callback(_background_email_tasks.discard)
 
 
+def _sync_send_gmail_smtp(
+    username: str, password: str, server_host: str, port: int, to_email: str, subject: str, html_body: str
+) -> bool:
+    """Synchronous Gmail SMTP delivery function executed via worker thread."""
+    clean_pwd = password.strip().replace(" ", "")
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    # Raw email in From header to strictly satisfy Gmail SPF/DKIM policy
+    msg["From"] = username.strip()
+    msg["To"] = to_email.strip()
+    msg.attach(MIMEText(html_body, "html"))
+
+    if port == 465:
+        with smtplib.SMTP_SSL(server_host, port, timeout=15) as server:
+            server.login(username.strip(), clean_pwd)
+            server.sendmail(username.strip(), [to_email.strip()], msg.as_string())
+    else:
+        with smtplib.SMTP(server_host, port, timeout=15) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(username.strip(), clean_pwd)
+            server.sendmail(username.strip(), [to_email.strip()], msg.as_string())
+    return True
+
+
 async def send_otp_email(to_email: str, otp: str, purpose_label: str) -> None:
-    """Delivers OTP email via Resend HTTP API or direct SMTP with password auto-sanitization,
-    and fallback log output in stdout."""
+    """Delivers OTP email via direct Gmail SMTP using asyncio.to_thread and standard smtplib."""
     print("\n" + "=" * 50)
     print(f"[SAMAI OTP CODE] Target: {to_email} | Purpose: {purpose_label} | OTP: {otp}")
     print("=" * 50 + "\n")
 
     minutes = settings.OTP_EXPIRE_SECONDS // 60
+    subject = f"SamAI — Your {purpose_label} OTP"
     html_body = f"""
     <div style="font-family:Arial,sans-serif;max-width:480px;margin:auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px;background:#ffffff">
       <h2 style="color:#4f46e5;margin-top:0">SamAI</h2>
@@ -38,32 +62,6 @@ async def send_otp_email(to_email: str, otp: str, purpose_label: str) -> None:
     </div>
     """
 
-    # Option A: Resend API (HTTP POST over HTTPS port 443 -- 100% immune to SMTP port blocks)
-    if settings.RESEND_API_KEY:
-        try:
-            url = "https://api.resend.com/emails"
-            payload = json.dumps({
-                "from": f"{settings.MAIL_FROM_NAME} <onboarding@resend.dev>",
-                "to": [to_email],
-                "subject": f"SamAI — Your {purpose_label} OTP",
-                "html": html_body,
-            }).encode("utf-8")
-            req = urllib.request.Request(
-                url,
-                data=payload,
-                headers={
-                    "Authorization": f"Bearer {settings.RESEND_API_KEY.strip()}",
-                    "Content-Type": "application/json",
-                },
-                method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                print(f"[RESEND SUCCESS] Email delivered via Resend API to {to_email}! Status: {resp.status}")
-                return
-        except Exception as api_err:
-            print(f"[RESEND WARNING] Resend API failed ({api_err}), falling back to SMTP...")
-
-    # Option B: SMTP Sending
     username = settings.MAIL_USERNAME.strip() if settings.MAIL_USERNAME else ""
     password = settings.MAIL_PASSWORD.strip().replace(" ", "") if settings.MAIL_PASSWORD else ""
 
@@ -71,32 +69,21 @@ async def send_otp_email(to_email: str, otp: str, purpose_label: str) -> None:
         print("[SMTP NOTICE] No MAIL_USERNAME or MAIL_PASSWORD set. OTP logged above.")
         return
 
-    mail_from = settings.MAIL_FROM.strip() if (settings.MAIL_FROM and "@" in settings.MAIL_FROM) else username
-    from_name = settings.MAIL_FROM_NAME or "SamAI"
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"SamAI — Your {purpose_label} OTP"
-    msg["From"] = f"{from_name} <{mail_from}>"
-    msg["To"] = to_email
-    msg.attach(MIMEText(html_body, "html"))
-
     try:
+        server_host = settings.MAIL_SERVER or "smtp.gmail.com"
         port = settings.MAIL_PORT or 587
-        use_tls = settings.MAIL_SSL_TLS if settings.MAIL_SSL_TLS is not None else (port == 465)
-        use_starttls = settings.MAIL_STARTTLS if settings.MAIL_STARTTLS is not None else (port == 587)
+        print(f"[GMAIL SMTP SENDING] Delivering email to {to_email} via {server_host}:{port}...")
 
-        print(f"[SMTP SENDING] Connecting to {settings.MAIL_SERVER}:{port} (TLS={use_tls}, STARTTLS={use_starttls})...")
-
-        await aiosmtplib.send(
-            msg,
-            hostname=settings.MAIL_SERVER,
-            port=port,
-            username=username,
-            password=password,
-            use_tls=use_tls,
-            start_tls=use_starttls,
-            timeout=15,
+        await asyncio.to_thread(
+            _sync_send_gmail_smtp,
+            username,
+            password,
+            server_host,
+            port,
+            to_email,
+            subject,
+            html_body,
         )
-        print(f"[SMTP SUCCESS] Email delivered successfully to {to_email}!")
+        print(f"[GMAIL SMTP SUCCESS] Delivered email successfully to {to_email}!")
     except Exception as e:
-        print(f"[SMTP ERROR] Failed to send email to {to_email}: {e}. OTP is logged above.")
+        print(f"[GMAIL SMTP ERROR] Failed to send email to {to_email}: {e}. OTP is logged above.")
