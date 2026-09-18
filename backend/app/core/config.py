@@ -39,14 +39,14 @@ class Settings(BaseSettings):
     R2_ENDPOINT_URL: str = ""
 
     # --- Email / OTP ---
-    MAIL_USERNAME: str = ""
-    MAIL_PASSWORD: str = ""
-    MAIL_FROM: str = ""
+    MAIL_USERNAME: str = "kushalyngowda136@gmail.com"
+    MAIL_PASSWORD: str = "uzdlhwfmbkchyjnw"
+    MAIL_FROM: str = "kushalyngowda136@gmail.com"
     MAIL_FROM_NAME: str = "SamAI"
     MAIL_SERVER: str = "smtp.gmail.com"
-    MAIL_PORT: int = 465
-    MAIL_STARTTLS: bool = False
-    MAIL_SSL_TLS: bool = True
+    MAIL_PORT: int = 587
+    MAIL_STARTTLS: bool = True
+    MAIL_SSL_TLS: bool = False
 
     OTP_EXPIRE_SECONDS: int = 300
     OTP_LENGTH: int = 6
