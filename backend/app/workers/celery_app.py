@@ -21,4 +21,6 @@ celery_app.conf.update(
     # think a worker died mid-job.
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    worker_concurrency=1,
 )
+
