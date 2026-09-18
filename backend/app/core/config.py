@@ -44,9 +44,10 @@ class Settings(BaseSettings):
     MAIL_FROM: str = ""
     MAIL_FROM_NAME: str = "SamAI"
     MAIL_SERVER: str = "smtp.gmail.com"
-    MAIL_PORT: int = 587
-    MAIL_STARTTLS: bool = True
-    MAIL_SSL_TLS: bool = False
+    MAIL_PORT: int = 465
+    MAIL_STARTTLS: bool = False
+    MAIL_SSL_TLS: bool = True
+
     OTP_EXPIRE_SECONDS: int = 300
     OTP_LENGTH: int = 6
 
