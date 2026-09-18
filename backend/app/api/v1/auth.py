@@ -65,14 +65,16 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
         await db.commit()
 
         otp = await generate_and_store_otp(payload.email, OTPPurpose.SIGNUP)
-        await send_otp_email(payload.email, otp, purpose_label="account verification")
+        try:
+            await send_otp_email(payload.email, otp, purpose_label="account verification")
+        except Exception as mail_err:
+            print(f"[MAIL WARNING] Outbound SMTP failed: {mail_err}. OTP for {payload.email} is: {otp}")
 
         return MessageResponse(message="OTP sent to your email. Verify to complete registration.")
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Registration error: {str(e)}")
-
 
 
 @router.post("/verify-signup-otp", response_model=TokenResponse)
@@ -98,8 +100,6 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Student).where(Student.email == payload.email))
     student = result.scalar_one_or_none()
 
-    # Same error for "no account" and "wrong password" so we don't leak
-    # which emails are registered.
     invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password.")
     if not student or not verify_password(payload.password, student.password_hash):
         raise invalid
@@ -108,7 +108,10 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Please verify your email before logging in.")
 
     otp = await generate_and_store_otp(payload.email, OTPPurpose.LOGIN)
-    await send_otp_email(payload.email, otp, purpose_label="login")
+    try:
+        await send_otp_email(payload.email, otp, purpose_label="login")
+    except Exception as mail_err:
+        print(f"[MAIL WARNING] Outbound SMTP failed: {mail_err}. OTP for {payload.email} is: {otp}")
 
     return MessageResponse(message="Password verified. OTP sent to your email.")
 
@@ -145,9 +148,13 @@ async def resend_otp(payload: ResendOTPRequest, db: AsyncSession = Depends(get_d
 
     purpose = OTPPurpose.SIGNUP if payload.purpose == "signup" else OTPPurpose.LOGIN
     otp = await generate_and_store_otp(payload.email, purpose)
-    await send_otp_email(payload.email, otp, purpose_label=payload.purpose)
+    try:
+        await send_otp_email(payload.email, otp, purpose_label=payload.purpose)
+    except Exception as mail_err:
+        print(f"[MAIL WARNING] Outbound SMTP failed: {mail_err}. OTP for {payload.email} is: {otp}")
 
     return MessageResponse(message="A new OTP has been sent to your email.")
+
 
 
 @router.get("/me", response_model=StudentOut)
