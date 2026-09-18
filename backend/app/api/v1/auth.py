@@ -40,7 +40,7 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
-async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(payload: RegisterRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     try:
         existing = await db.execute(select(Student).where(Student.email == payload.email))
         student = existing.scalar_one_or_none()
@@ -65,10 +65,7 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
         await db.commit()
 
         otp = await generate_and_store_otp(payload.email, OTPPurpose.SIGNUP)
-        try:
-            await send_otp_email(payload.email, otp, purpose_label="account verification")
-        except Exception as mail_err:
-            print(f"[MAIL WARNING] Outbound SMTP failed: {mail_err}. OTP for {payload.email} is: {otp}")
+        background_tasks.add_task(send_otp_email, payload.email, otp, "account verification")
 
         return MessageResponse(message="OTP sent to your email. Verify to complete registration.")
     except HTTPException:
@@ -96,7 +93,7 @@ async def verify_signup_otp(payload: VerifySignupOTPRequest, db: AsyncSession = 
 
 
 @router.post("/login", response_model=MessageResponse)
-async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(payload: LoginRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Student).where(Student.email == payload.email))
     student = result.scalar_one_or_none()
 
@@ -108,10 +105,7 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Please verify your email before logging in.")
 
     otp = await generate_and_store_otp(payload.email, OTPPurpose.LOGIN)
-    try:
-        await send_otp_email(payload.email, otp, purpose_label="login")
-    except Exception as mail_err:
-        print(f"[MAIL WARNING] Outbound SMTP failed: {mail_err}. OTP for {payload.email} is: {otp}")
+    background_tasks.add_task(send_otp_email, payload.email, otp, "login")
 
     return MessageResponse(message="Password verified. OTP sent to your email.")
 
@@ -137,7 +131,7 @@ async def verify_login_otp(payload: VerifyLoginOTPRequest, db: AsyncSession = De
 
 
 @router.post("/resend-otp", response_model=MessageResponse)
-async def resend_otp(payload: ResendOTPRequest, db: AsyncSession = Depends(get_db)):
+async def resend_otp(payload: ResendOTPRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     if payload.purpose not in ("signup", "login"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "purpose must be 'signup' or 'login'.")
 
@@ -148,10 +142,7 @@ async def resend_otp(payload: ResendOTPRequest, db: AsyncSession = Depends(get_d
 
     purpose = OTPPurpose.SIGNUP if payload.purpose == "signup" else OTPPurpose.LOGIN
     otp = await generate_and_store_otp(payload.email, purpose)
-    try:
-        await send_otp_email(payload.email, otp, purpose_label=payload.purpose)
-    except Exception as mail_err:
-        print(f"[MAIL WARNING] Outbound SMTP failed: {mail_err}. OTP for {payload.email} is: {otp}")
+    background_tasks.add_task(send_otp_email, payload.email, otp, payload.purpose)
 
     return MessageResponse(message="A new OTP has been sent to your email.")
 

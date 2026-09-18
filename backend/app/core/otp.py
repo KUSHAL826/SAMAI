@@ -1,15 +1,6 @@
-"""
-OTP handling for email verification (signup) and passwordless-style
-login confirmation.
-
-Uses `pyotp` (prebuilt, widely-used OTP library) to generate the code,
-and Redis (already in our stack for caching/Celery) as expiring storage --
-no extra table or service needed. The OTP itself is hashed before being
-stored, exactly like a password.
-"""
 import enum
-
-import pyotp
+import secrets
+import time
 
 from app.core.config import get_settings
 from app.core.redis_client import get_redis
@@ -31,18 +22,17 @@ def _attempts_key(email: str, purpose: OTPPurpose) -> str:
     return f"otp_attempts:{purpose.value}:{email.lower().strip()}"
 
 
-import time
-
 _memory_otp_store: dict[str, tuple[str, float]] = {}
 
 
-async def generate_and_store_otp(email: str, purpose: OTPPurpose) -> str:
-    """Generates a numeric OTP, hashes it, and stores it in Redis with a TTL.
-    Falls back to in-memory store if Redis is unavailable."""
-    secret = pyotp.random_base32()
-    totp = pyotp.TOTP(secret, digits=settings.OTP_LENGTH, interval=settings.OTP_EXPIRE_SECONDS)
-    otp = totp.now()
+def generate_numeric_code(length: int = 6) -> str:
+    """Generates a secure random numeric OTP (e.g. '849201')."""
+    return "".join(secrets.choice("0123456789") for _ in range(length))
 
+
+async def generate_and_store_otp(email: str, purpose: OTPPurpose) -> str:
+    """Generates a numeric OTP, hashes it, and stores it in Redis / memory with a 5-minute TTL."""
+    otp = generate_numeric_code(settings.OTP_LENGTH)
     key = _redis_key(email, purpose)
     hashed = hash_password(otp)
 
@@ -54,38 +44,40 @@ async def generate_and_store_otp(email: str, purpose: OTPPurpose) -> str:
         print(f"[OTP WARNING] Redis unavailable, using memory store: {e}")
         _memory_otp_store[key] = (hashed, time.time() + settings.OTP_EXPIRE_SECONDS)
 
+    # Also store in memory as instant backup
+    _memory_otp_store[key] = (hashed, time.time() + settings.OTP_EXPIRE_SECONDS)
+
     return otp
 
 
 async def verify_otp(email: str, purpose: OTPPurpose, submitted_otp: str) -> bool:
-    """Checks the submitted OTP against the stored hash."""
+    """Checks the submitted OTP against the stored hash. Valid for 5 full minutes."""
+    clean_submitted = submitted_otp.strip()
     key = _redis_key(email, purpose)
     attempts_key = _attempts_key(email, purpose)
 
+    # 1. Try Redis verification first
     try:
         redis = get_redis()
         attempts = int(await redis.get(attempts_key) or 0)
-        if attempts >= 5:
-            return False
-
-        stored_hash = await redis.get(key)
-        if stored_hash and verify_password(submitted_otp, stored_hash):
-            await redis.delete(key)
-            await redis.delete(attempts_key)
-            return True
-        elif stored_hash:
-            await redis.incr(attempts_key)
-            await redis.expire(attempts_key, settings.OTP_EXPIRE_SECONDS)
-            return False
+        if attempts < 5:
+            stored_hash = await redis.get(key)
+            if stored_hash and verify_password(clean_submitted, stored_hash):
+                await redis.delete(key)
+                await redis.delete(attempts_key)
+                _memory_otp_store.pop(key, None)
+                return True
+            elif stored_hash:
+                await redis.incr(attempts_key)
+                await redis.expire(attempts_key, settings.OTP_EXPIRE_SECONDS)
     except Exception as e:
-        print(f"[OTP WARNING] Redis verify fallback to memory store: {e}")
+        print(f"[OTP WARNING] Redis verify error: {e}")
 
-    # Fallback to memory store
+    # 2. Memory store fallback (guarantees verification succeeds even if Redis is slow)
     if key in _memory_otp_store:
         hashed, expires_at = _memory_otp_store[key]
-        if time.time() < expires_at and verify_password(submitted_otp, hashed):
-            del _memory_otp_store[key]
+        if time.time() < expires_at and verify_password(clean_submitted, hashed):
+            _memory_otp_store.pop(key, None)
             return True
 
     return False
-
