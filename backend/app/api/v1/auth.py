@@ -12,9 +12,10 @@ Auth flow (spec section 2), extended with email-OTP verification:
   POST /resend-otp              -> re-sends a fresh OTP for either flow
 
 OTP is stored in DB, hashed with bcrypt, valid for 5 minutes.
-Emails are sent in background over SMTP.
+Emails are sent asynchronously in background.
 """
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+import asyncio
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,7 +40,7 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
-async def register(payload: RegisterRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
     try:
         clean_email = payload.email.lower().strip()
         existing = await db.execute(select(Student).where(Student.email == clean_email))
@@ -65,7 +66,7 @@ async def register(payload: RegisterRequest, background_tasks: BackgroundTasks, 
         await db.commit()
 
         otp = await generate_and_store_otp(clean_email, OTPPurpose.SIGNUP, db=db)
-        background_tasks.add_task(send_otp_email, clean_email, otp, "account verification")
+        asyncio.create_task(send_otp_email(clean_email, otp, "account verification"))
 
         return MessageResponse(message="OTP sent to your email. Verify to complete registration.")
     except HTTPException:
@@ -94,7 +95,7 @@ async def verify_signup_otp(payload: VerifySignupOTPRequest, db: AsyncSession = 
 
 
 @router.post("/login", response_model=MessageResponse)
-async def login(payload: LoginRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     clean_email = payload.email.lower().strip()
     result = await db.execute(select(Student).where(Student.email == clean_email))
     student = result.scalar_one_or_none()
@@ -107,7 +108,7 @@ async def login(payload: LoginRequest, background_tasks: BackgroundTasks, db: As
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Please verify your email before logging in.")
 
     otp = await generate_and_store_otp(clean_email, OTPPurpose.LOGIN, db=db)
-    background_tasks.add_task(send_otp_email, clean_email, otp, "login")
+    asyncio.create_task(send_otp_email(clean_email, otp, "login"))
 
     return MessageResponse(message="Password verified. OTP sent to your email.")
 
@@ -134,7 +135,7 @@ async def verify_login_otp(payload: VerifyLoginOTPRequest, db: AsyncSession = De
 
 
 @router.post("/resend-otp", response_model=MessageResponse)
-async def resend_otp(payload: ResendOTPRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+async def resend_otp(payload: ResendOTPRequest, db: AsyncSession = Depends(get_db)):
     clean_email = payload.email.lower().strip()
     if payload.purpose not in ("signup", "login"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "purpose must be 'signup' or 'login'.")
@@ -146,7 +147,7 @@ async def resend_otp(payload: ResendOTPRequest, background_tasks: BackgroundTask
 
     purpose = OTPPurpose.SIGNUP if payload.purpose == "signup" else OTPPurpose.LOGIN
     otp = await generate_and_store_otp(clean_email, purpose, db=db)
-    background_tasks.add_task(send_otp_email, clean_email, otp, payload.purpose)
+    asyncio.create_task(send_otp_email(clean_email, otp, payload.purpose))
 
     return MessageResponse(message="A new OTP has been sent to your email.")
 
