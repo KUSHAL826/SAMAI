@@ -44,7 +44,7 @@ function VerifySignupForm() {
   }
 
   return (
-    <AuthShell title="Verify your email" subtitle={`We sent a code to ${email || "your email"}.`}>
+    <AuthShell title="Verify your email" subtitle={`We sent a 6-digit code to ${email || "your email"}`}>
       <form onSubmit={handleSubmit}>
         <ErrorText message={error} />
         <Field
