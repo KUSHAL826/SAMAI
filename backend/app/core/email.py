@@ -1,3 +1,4 @@
+import asyncio
 import aiosmtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -5,6 +6,15 @@ from email.mime.text import MIMEText
 from app.core.config import get_settings
 
 settings = get_settings()
+
+_background_email_tasks: set[asyncio.Task] = set()
+
+
+def background_send_otp_email(to_email: str, otp: str, purpose_label: str) -> None:
+    """Launches send_otp_email in background with a strong Task reference to prevent GC eviction."""
+    task = asyncio.create_task(send_otp_email(to_email, otp, purpose_label))
+    _background_email_tasks.add(task)
+    task.add_done_callback(_background_email_tasks.discard)
 
 
 async def send_otp_email(to_email: str, otp: str, purpose_label: str) -> None:

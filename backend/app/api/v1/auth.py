@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_student
-from app.core.email import send_otp_email
+from app.core.email import background_send_otp_email, send_otp_email
 from app.core.otp import OTPPurpose, generate_and_store_otp, verify_otp
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.models.student import Student
@@ -66,7 +66,7 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
         await db.commit()
 
         otp = await generate_and_store_otp(clean_email, OTPPurpose.SIGNUP, db=db)
-        asyncio.create_task(send_otp_email(clean_email, otp, "account verification"))
+        background_send_otp_email(clean_email, otp, "account verification")
 
         return MessageResponse(message="OTP sent to your email. Verify to complete registration.")
     except HTTPException:
@@ -108,7 +108,7 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Please verify your email before logging in.")
 
     otp = await generate_and_store_otp(clean_email, OTPPurpose.LOGIN, db=db)
-    asyncio.create_task(send_otp_email(clean_email, otp, "login"))
+    background_send_otp_email(clean_email, otp, "login")
 
     return MessageResponse(message="Password verified. OTP sent to your email.")
 
@@ -147,7 +147,7 @@ async def resend_otp(payload: ResendOTPRequest, db: AsyncSession = Depends(get_d
 
     purpose = OTPPurpose.SIGNUP if payload.purpose == "signup" else OTPPurpose.LOGIN
     otp = await generate_and_store_otp(clean_email, purpose, db=db)
-    asyncio.create_task(send_otp_email(clean_email, otp, payload.purpose))
+    background_send_otp_email(clean_email, otp, payload.purpose)
 
     return MessageResponse(message="A new OTP has been sent to your email.")
 

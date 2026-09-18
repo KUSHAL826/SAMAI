@@ -40,6 +40,11 @@ app.include_router(admin_patterns_router)
 app.include_router(questions_router)
 
 
+@app.get("/", tags=["system"])
+async def root():
+    return {"message": "SamAI API Service is running", "docs": "/docs", "health": "/health"}
+
+
 @app.get("/health", tags=["system"])
 async def health():
     return {"status": "ok", "environment": settings.ENVIRONMENT}
