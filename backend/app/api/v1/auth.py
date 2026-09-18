@@ -11,11 +11,10 @@ Auth flow (spec section 2), extended with email-OTP verification:
 
   POST /resend-otp              -> re-sends a fresh OTP for either flow
 
-OTP is generated with pyotp, hashed, and stored in Redis with a TTL
-(app/core/otp.py). Emails are sent with fastapi-mail over plain SMTP
-(app/core/email.py) -- no paid email API required.
+OTP is stored in DB, hashed with bcrypt, valid for 5 minutes.
+Emails are sent in background over SMTP.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,7 +41,8 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 @router.post("/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
 async def register(payload: RegisterRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     try:
-        existing = await db.execute(select(Student).where(Student.email == payload.email))
+        clean_email = payload.email.lower().strip()
+        existing = await db.execute(select(Student).where(Student.email == clean_email))
         student = existing.scalar_one_or_none()
 
         if student and student.is_verified:
@@ -55,7 +55,7 @@ async def register(payload: RegisterRequest, background_tasks: BackgroundTasks, 
         else:
             student = Student(
                 name=payload.name,
-                email=payload.email,
+                email=clean_email,
                 mobile=payload.mobile,
                 password_hash=hash_password(payload.password),
                 is_verified=False,
@@ -64,8 +64,8 @@ async def register(payload: RegisterRequest, background_tasks: BackgroundTasks, 
 
         await db.commit()
 
-        otp = await generate_and_store_otp(payload.email, OTPPurpose.SIGNUP)
-        background_tasks.add_task(send_otp_email, payload.email, otp, "account verification")
+        otp = await generate_and_store_otp(clean_email, OTPPurpose.SIGNUP, db=db)
+        background_tasks.add_task(send_otp_email, clean_email, otp, "account verification")
 
         return MessageResponse(message="OTP sent to your email. Verify to complete registration.")
     except HTTPException:
@@ -76,11 +76,12 @@ async def register(payload: RegisterRequest, background_tasks: BackgroundTasks, 
 
 @router.post("/verify-signup-otp", response_model=TokenResponse)
 async def verify_signup_otp(payload: VerifySignupOTPRequest, db: AsyncSession = Depends(get_db)):
-    ok = await verify_otp(payload.email, OTPPurpose.SIGNUP, payload.otp)
+    clean_email = payload.email.lower().strip()
+    ok = await verify_otp(clean_email, OTPPurpose.SIGNUP, payload.otp, db=db)
     if not ok:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired OTP.")
 
-    result = await db.execute(select(Student).where(Student.email == payload.email))
+    result = await db.execute(select(Student).where(Student.email == clean_email))
     student = result.scalar_one_or_none()
     if not student:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Student not found.")
@@ -94,7 +95,8 @@ async def verify_signup_otp(payload: VerifySignupOTPRequest, db: AsyncSession = 
 
 @router.post("/login", response_model=MessageResponse)
 async def login(payload: LoginRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Student).where(Student.email == payload.email))
+    clean_email = payload.email.lower().strip()
+    result = await db.execute(select(Student).where(Student.email == clean_email))
     student = result.scalar_one_or_none()
 
     invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password.")
@@ -104,19 +106,20 @@ async def login(payload: LoginRequest, background_tasks: BackgroundTasks, db: As
     if not student.is_verified:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Please verify your email before logging in.")
 
-    otp = await generate_and_store_otp(payload.email, OTPPurpose.LOGIN)
-    background_tasks.add_task(send_otp_email, payload.email, otp, "login")
+    otp = await generate_and_store_otp(clean_email, OTPPurpose.LOGIN, db=db)
+    background_tasks.add_task(send_otp_email, clean_email, otp, "login")
 
     return MessageResponse(message="Password verified. OTP sent to your email.")
 
 
 @router.post("/verify-login-otp", response_model=TokenResponse)
 async def verify_login_otp(payload: VerifyLoginOTPRequest, db: AsyncSession = Depends(get_db)):
-    ok = await verify_otp(payload.email, OTPPurpose.LOGIN, payload.otp)
+    clean_email = payload.email.lower().strip()
+    ok = await verify_otp(clean_email, OTPPurpose.LOGIN, payload.otp, db=db)
     if not ok:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired OTP.")
 
-    result = await db.execute(select(Student).where(Student.email == payload.email))
+    result = await db.execute(select(Student).where(Student.email == clean_email))
     student = result.scalar_one_or_none()
     if not student:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Student not found.")
@@ -132,20 +135,20 @@ async def verify_login_otp(payload: VerifyLoginOTPRequest, db: AsyncSession = De
 
 @router.post("/resend-otp", response_model=MessageResponse)
 async def resend_otp(payload: ResendOTPRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+    clean_email = payload.email.lower().strip()
     if payload.purpose not in ("signup", "login"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "purpose must be 'signup' or 'login'.")
 
-    result = await db.execute(select(Student).where(Student.email == payload.email))
+    result = await db.execute(select(Student).where(Student.email == clean_email))
     student = result.scalar_one_or_none()
     if not student:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Student not found.")
 
     purpose = OTPPurpose.SIGNUP if payload.purpose == "signup" else OTPPurpose.LOGIN
-    otp = await generate_and_store_otp(payload.email, purpose)
-    background_tasks.add_task(send_otp_email, payload.email, otp, payload.purpose)
+    otp = await generate_and_store_otp(clean_email, purpose, db=db)
+    background_tasks.add_task(send_otp_email, clean_email, otp, payload.purpose)
 
     return MessageResponse(message="A new OTP has been sent to your email.")
-
 
 
 @router.get("/me", response_model=StudentOut)

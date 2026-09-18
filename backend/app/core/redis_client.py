@@ -12,5 +12,10 @@ def get_redis() -> Redis:
     for Celery, reused here for OTP storage so we don't add another service."""
     global _redis
     if _redis is None:
-        _redis = from_url(settings.REDIS_URL, decode_responses=True)
+        _redis = from_url(
+            settings.REDIS_URL,
+            decode_responses=True,
+            socket_connect_timeout=0.5,
+            socket_timeout=0.5,
+        )
     return _redis

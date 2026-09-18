@@ -19,6 +19,10 @@ class Student(Base, UUIDPKMixin, TimestampMixin):
     is_verified: Mapped[bool] = mapped_column(default=False)
     last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    otp_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    otp_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    otp_purpose: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
     sessions: Mapped[list["StudentSession"]] = relationship(back_populates="student")
 
     # NOTE: password_hash is intentionally never included in any Pydantic
