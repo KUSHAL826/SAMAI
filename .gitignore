@@ -1,0 +1,60 @@
+# ==============================
+# Environment files / secrets
+# ==============================
+.env
+.env.*
+*.env
+!.env.example
+!.env.local.example
+
+backend/.env
+frontend/.env.local
+
+# Keys, credentials & certificates
+*.pem
+*.key
+*.crt
+*.pfx
+*.p12
+credentials.json
+secrets.json
+.supabase/
+
+
+# ==============================
+# Backend (Python / FastAPI)
+# ==============================
+**/__pycache__/
+*.py[cod]
+*$py.class
+backend/venv/
+backend/.venv/
+backend/*.egg-info/
+backend/.pytest_cache/
+backend/.mypy_cache/
+
+# Uploaded/generated files (keep the folder via .gitkeep, ignore its contents)
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# ==============================
+# Frontend (Next.js)
+# ==============================
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.turbo/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.pnpm-debug.log*
+
+# ==============================
+# OS / editor
+# ==============================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
