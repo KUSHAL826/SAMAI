@@ -35,4 +35,8 @@ async def send_otp_email(to_email: str, otp: str, purpose_label: str) -> None:
         """,
         subtype=MessageType.html,
     )
-    await fm.send_message(message)
+    try:
+        await fm.send_message(message)
+    except Exception as e:
+        print(f"[SMTP WARNING] Outbound email failed ({e}). Generated OTP for {to_email} is: {otp}")
+
