@@ -20,9 +20,10 @@ export default function RegisterPage() {
     try {
       await api.post("/api/v1/auth/register", form);
       router.push(`/verify-signup?email=${encodeURIComponent(form.email)}`);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
+    } catch (err: any) {
+      setError(err instanceof ApiError ? err.message : (err?.message || "Failed to connect to backend server. Please check CORS or API URL."));
     } finally {
+
       setLoading(false);
     }
   }
