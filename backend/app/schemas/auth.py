@@ -27,7 +27,17 @@ class VerifyLoginOTPRequest(BaseModel):
 
 class ResendOTPRequest(BaseModel):
     email: EmailStr
-    purpose: str  # "signup" | "login"
+    purpose: str  # "signup" | "login" | "reset_password"
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=4, max_length=10)
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 class MessageResponse(BaseModel):
@@ -47,4 +57,3 @@ class StudentOut(BaseModel):
     is_verified: bool
 
     model_config = {"from_attributes": True}
-    # Note: password_hash is deliberately never part of this (or any) schema.

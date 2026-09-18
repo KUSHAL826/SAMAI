@@ -9,7 +9,11 @@ Auth flow (spec section 2), extended with email-OTP verification:
     POST /login                 -> checks password, emails a fresh OTP
     POST /verify-login-otp      -> confirms OTP, returns JWT
 
-  POST /resend-otp              -> re-sends a fresh OTP for either flow
+  FORGOT PASSWORD:
+    POST /forgot-password       -> emails password reset OTP
+    POST /reset-password        -> verifies reset OTP and updates password
+
+  POST /resend-otp              -> re-sends a fresh OTP for any flow
 
 OTP is stored in DB, hashed with bcrypt, valid for 5 minutes.
 Emails are sent asynchronously in background.
@@ -20,23 +24,33 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_student
+from app.core.config import get_settings
 from app.core.email import background_send_otp_email, send_otp_email
 from app.core.otp import OTPPurpose, generate_and_store_otp, verify_otp
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.models.student import Student
 from app.db.session import get_db
 from app.schemas.auth import (
+    ForgotPasswordRequest,
     LoginRequest,
     MessageResponse,
     RegisterRequest,
     ResendOTPRequest,
+    ResetPasswordRequest,
     StudentOut,
     TokenResponse,
     VerifyLoginOTPRequest,
     VerifySignupOTPRequest,
 )
 
+settings = get_settings()
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+
+
+def _msg_with_otp(base_msg: str, otp: str) -> str:
+    if settings.SHOW_OTP_IN_RESPONSE:
+        return f"{base_msg} (Code: {otp})"
+    return base_msg
 
 
 @router.post("/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
@@ -68,7 +82,7 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
         otp = await generate_and_store_otp(clean_email, OTPPurpose.SIGNUP, db=db)
         background_send_otp_email(clean_email, otp, "account verification")
 
-        return MessageResponse(message="OTP sent to your email. Verify to complete registration.")
+        return MessageResponse(message=_msg_with_otp("OTP sent to your email.", otp))
     except HTTPException:
         raise
     except Exception as e:
@@ -110,7 +124,7 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     otp = await generate_and_store_otp(clean_email, OTPPurpose.LOGIN, db=db)
     background_send_otp_email(clean_email, otp, "login")
 
-    return MessageResponse(message="Password verified. OTP sent to your email.")
+    return MessageResponse(message=_msg_with_otp("Password verified. OTP sent to your email.", otp))
 
 
 @router.post("/verify-login-otp", response_model=TokenResponse)
@@ -134,22 +148,60 @@ async def verify_login_otp(payload: VerifyLoginOTPRequest, db: AsyncSession = De
     return TokenResponse(access_token=token)
 
 
-@router.post("/resend-otp", response_model=MessageResponse)
-async def resend_otp(payload: ResendOTPRequest, db: AsyncSession = Depends(get_db)):
+@router.post("/forgot-password", response_model=MessageResponse)
+async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
     clean_email = payload.email.lower().strip()
-    if payload.purpose not in ("signup", "login"):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "purpose must be 'signup' or 'login'.")
+    result = await db.execute(select(Student).where(Student.email == clean_email))
+    student = result.scalar_one_or_none()
+    if not student:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No account registered with this email address.")
+
+    otp = await generate_and_store_otp(clean_email, OTPPurpose.RESET_PASSWORD, db=db)
+    background_send_otp_email(clean_email, otp, "password reset")
+
+    return MessageResponse(message=_msg_with_otp("Password reset code sent to your email.", otp))
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    clean_email = payload.email.lower().strip()
+    ok = await verify_otp(clean_email, OTPPurpose.RESET_PASSWORD, payload.otp, db=db)
+    if not ok:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired reset code.")
 
     result = await db.execute(select(Student).where(Student.email == clean_email))
     student = result.scalar_one_or_none()
     if not student:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Student not found.")
 
-    purpose = OTPPurpose.SIGNUP if payload.purpose == "signup" else OTPPurpose.LOGIN
-    otp = await generate_and_store_otp(clean_email, purpose, db=db)
-    background_send_otp_email(clean_email, otp, payload.purpose)
+    student.password_hash = hash_password(payload.new_password)
+    student.is_verified = True
+    await db.commit()
 
-    return MessageResponse(message="A new OTP has been sent to your email.")
+    return MessageResponse(message="Password reset successfully. You can now log in.")
+
+
+@router.post("/resend-otp", response_model=MessageResponse)
+async def resend_otp(payload: ResendOTPRequest, db: AsyncSession = Depends(get_db)):
+    clean_email = payload.email.lower().strip()
+    if payload.purpose not in ("signup", "login", "reset_password"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid purpose specified.")
+
+    result = await db.execute(select(Student).where(Student.email == clean_email))
+    student = result.scalar_one_or_none()
+    if not student:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Student not found.")
+
+    purpose_map = {
+        "signup": OTPPurpose.SIGNUP,
+        "login": OTPPurpose.LOGIN,
+        "reset_password": OTPPurpose.RESET_PASSWORD,
+    }
+    purpose = purpose_map.get(payload.purpose, OTPPurpose.SIGNUP)
+    otp = await generate_and_store_otp(clean_email, purpose, db=db)
+    background_send_otp_email(clean_email, otp, payload.purpose.replace("_", " "))
+
+    return MessageResponse(message=_msg_with_otp("A new OTP has been sent to your email.", otp))
 
 
 @router.get("/me", response_model=StudentOut)

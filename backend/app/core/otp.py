@@ -16,6 +16,7 @@ settings = get_settings()
 class OTPPurpose(str, enum.Enum):
     SIGNUP = "signup"
     LOGIN = "login"
+    RESET_PASSWORD = "reset_password"
 
 
 def _redis_key(email: str, purpose: OTPPurpose) -> str:

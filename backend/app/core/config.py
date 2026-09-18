@@ -50,6 +50,8 @@ class Settings(BaseSettings):
 
     OTP_EXPIRE_SECONDS: int = 300
     OTP_LENGTH: int = 6
+    RESEND_API_KEY: str = ""
+    SHOW_OTP_IN_RESPONSE: bool = True
 
     # --- App ---
     ENVIRONMENT: str = "development"

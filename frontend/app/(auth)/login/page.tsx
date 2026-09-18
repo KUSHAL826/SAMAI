@@ -38,10 +38,17 @@ export default function LoginPage() {
           value={form.email}
           onChange={(e) => setForm({ ...form, email: e.target.value })}
         />
+        <div className="flex justify-between items-center mb-1 mt-3">
+          <span className="text-sm font-medium text-slate">Password</span>
+          <Link href="/forgot-password" className="text-xs text-indigo underline">
+            Forgot password?
+          </Link>
+        </div>
         <Field
-          label="Password"
+          label=""
           type="password"
           required
+          placeholder="Enter your password"
           value={form.password}
           onChange={(e) => setForm({ ...form, password: e.target.value })}
         />
