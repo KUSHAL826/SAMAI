@@ -19,11 +19,13 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origin_list,
+    allow_origins=["*"] if "*" in settings.cors_origin_list else settings.cors_origin_list,
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Serves locally-stored documents/PDFs when STORAGE_PROVIDER=local.
 # In production (STORAGE_PROVIDER=r2) this is unused -- files are served
