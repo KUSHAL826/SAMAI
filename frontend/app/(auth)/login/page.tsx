@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AuthShell from "@/components/AuthShell";
 import { Field, SubmitButton, ErrorText } from "@/components/FormControls";
-import { api, ApiError } from "@/lib/api";
+import { api, saveToken, ApiError } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,17 +18,18 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      await api.post("/api/v1/auth/login", form);
-      router.push(`/verify-login?email=${encodeURIComponent(form.email)}`);
+      const res = await api.post<{ access_token: string }>("/api/v1/auth/login", form);
+      saveToken(res.access_token);
+      router.push("/dashboard");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not log in. Please try again.");
+      setError(err instanceof ApiError ? err.message : "Could not log in. Please check your credentials.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <AuthShell title="Log in" subtitle="Enter your password to receive a login code by email.">
+    <AuthShell title="Log in" subtitle="Enter your email and password to access your dashboard.">
       <form onSubmit={handleSubmit}>
         <ErrorText message={error} />
         <Field
@@ -52,7 +53,7 @@ export default function LoginPage() {
           value={form.password}
           onChange={(e) => setForm({ ...form, password: e.target.value })}
         />
-        <SubmitButton loading={loading}>Send login code</SubmitButton>
+        <SubmitButton loading={loading}>Log in</SubmitButton>
       </form>
       <p className="mt-6 text-sm text-slate">
         New to SamAI?{" "}

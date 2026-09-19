@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AuthShell from "@/components/AuthShell";
 import { Field, SubmitButton, ErrorText } from "@/components/FormControls";
-import { api, ApiError } from "@/lib/api";
+import { api, saveToken, ApiError } from "@/lib/api";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -18,12 +18,12 @@ export default function RegisterPage() {
     setError(null);
     setLoading(true);
     try {
-      await api.post("/api/v1/auth/register", form);
-      router.push(`/verify-signup?email=${encodeURIComponent(form.email)}`);
+      const res = await api.post<{ access_token: string }>("/api/v1/auth/register", form);
+      saveToken(res.access_token);
+      router.push("/dashboard");
     } catch (err: any) {
-      setError(err instanceof ApiError ? err.message : (err?.message || "Failed to connect to backend server. Please check CORS or API URL."));
+      setError(err instanceof ApiError ? err.message : (err?.message || "Failed to create account. Please try again."));
     } finally {
-
       setLoading(false);
     }
   }
@@ -59,7 +59,7 @@ export default function RegisterPage() {
           value={form.password}
           onChange={(e) => setForm({ ...form, password: e.target.value })}
         />
-        <SubmitButton loading={loading}>Send verification code</SubmitButton>
+        <SubmitButton loading={loading}>Create Account</SubmitButton>
       </form>
       <p className="mt-6 text-sm text-slate">
         Already have an account?{" "}
