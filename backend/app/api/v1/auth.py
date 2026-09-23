@@ -61,21 +61,19 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
         student = existing.scalars().first()
 
         if student:
-            # If student exists, update credentials and mark verified
-            student.name = clean_name
-            student.email = clean_email
-            student.mobile = mobile
-            student.password_hash = hash_password(payload.password)
-            student.is_verified = True
-        else:
-            student = Student(
-                name=clean_name,
-                email=clean_email,
-                mobile=mobile,
-                password_hash=hash_password(payload.password),
-                is_verified=True,
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Student with this email or name already exists. Please log in instead.",
             )
-            db.add(student)
+
+        student = Student(
+            name=clean_name,
+            email=clean_email,
+            mobile=mobile,
+            password_hash=hash_password(payload.password),
+            is_verified=True,
+        )
+        db.add(student)
 
         await db.commit()
 
