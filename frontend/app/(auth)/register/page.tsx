@@ -9,7 +9,7 @@ import { api, saveToken, ApiError } from "@/lib/api";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ name: "", password: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "" });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -20,6 +20,7 @@ export default function RegisterPage() {
     try {
       const res = await api.post<{ access_token: string }>("/api/v1/auth/register", {
         name: form.name.trim(),
+        email: form.email.trim().toLowerCase(),
         password: form.password,
       });
       saveToken(res.access_token);
@@ -32,7 +33,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <AuthShell title="Create Student Account" subtitle="Enter your student name and password to get started.">
+    <AuthShell title="Create Student Account" subtitle="Enter your name, email, and password to get started.">
       <form onSubmit={handleSubmit}>
         <ErrorText message={error} />
         <Field
@@ -42,6 +43,14 @@ export default function RegisterPage() {
           placeholder="Enter your student name"
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
+        />
+        <Field
+          label="Email Address"
+          type="email"
+          required
+          placeholder="e.g. student@example.com"
+          value={form.email}
+          onChange={(e) => setForm({ ...form, email: e.target.value })}
         />
         <Field
           label="Password"

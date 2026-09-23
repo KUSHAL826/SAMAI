@@ -43,17 +43,15 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
     try:
         clean_name = payload.name.strip()
-        clean_email = (
-            payload.email.lower().strip()
-            if payload.email
-            else f"{clean_name.lower().replace(' ', '')}@student.samai"
-        )
+        if not payload.email:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Email address is required for registration.")
+        clean_email = payload.email.lower().strip()
         mobile = payload.mobile or "0000000000"
 
         existing = await db.execute(
             select(Student).where(
                 or_(
-                    func.lower(Student.email) == clean_email.lower(),
+                    func.lower(Student.email) == clean_email,
                     func.lower(Student.name) == clean_name.lower(),
                 )
             )
@@ -61,9 +59,14 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
         student = existing.scalars().first()
 
         if student:
+            if student.email.lower() == clean_email:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"A student with email address '{clean_email}' already exists. Please log in instead.",
+                )
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
-                "Student with this email or name already exists. Please log in instead.",
+                f"A student with name '{clean_name}' already exists. Please log in instead.",
             )
 
         student = Student(
