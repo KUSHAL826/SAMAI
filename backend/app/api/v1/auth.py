@@ -12,7 +12,7 @@ Auth flow (spec section 2) -- direct signup and login without OTP requirements:
 """
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_student
@@ -42,21 +42,36 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
     try:
-        clean_email = payload.email.lower().strip()
-        existing = await db.execute(select(Student).where(Student.email == clean_email))
-        student = existing.scalar_one_or_none()
+        clean_name = payload.name.strip()
+        clean_email = (
+            payload.email.lower().strip()
+            if payload.email
+            else f"{clean_name.lower().replace(' ', '')}@student.samai"
+        )
+        mobile = payload.mobile or "0000000000"
+
+        existing = await db.execute(
+            select(Student).where(
+                or_(
+                    func.lower(Student.email) == clean_email.lower(),
+                    func.lower(Student.name) == clean_name.lower(),
+                )
+            )
+        )
+        student = existing.scalars().first()
 
         if student:
             # If student exists, update credentials and mark verified
-            student.name = payload.name
-            student.mobile = payload.mobile
+            student.name = clean_name
+            student.email = clean_email
+            student.mobile = mobile
             student.password_hash = hash_password(payload.password)
             student.is_verified = True
         else:
             student = Student(
-                name=payload.name,
+                name=clean_name,
                 email=clean_email,
-                mobile=payload.mobile,
+                mobile=mobile,
                 password_hash=hash_password(payload.password),
                 is_verified=True,
             )
@@ -74,13 +89,29 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
 
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
-    clean_email = payload.email.lower().strip()
-    result = await db.execute(select(Student).where(Student.email == clean_email))
-    student = result.scalar_one_or_none()
+    identifier = (payload.name or payload.email or "").strip()
+    if not identifier:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Student name is required.")
 
-    invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password.")
-    if not student or not verify_password(payload.password, student.password_hash):
-        raise invalid
+    clean_identifier = identifier.lower()
+    result = await db.execute(
+        select(Student).where(
+            or_(
+                func.lower(Student.name) == clean_identifier,
+                func.lower(Student.email) == clean_identifier,
+            )
+        )
+    )
+    students = result.scalars().all()
+
+    student = None
+    for s in students:
+        if verify_password(payload.password, s.password_hash):
+            student = s
+            break
+
+    if not student:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid student name or password.")
 
     student.is_verified = True
     student.last_login = datetime.now(timezone.utc)

@@ -5,9 +5,9 @@ from pydantic import BaseModel, EmailStr, Field
 
 class RegisterRequest(BaseModel):
     name: str = Field(min_length=2, max_length=255)
-    email: EmailStr
-    mobile: str = Field(min_length=7, max_length=20)
-    password: str = Field(min_length=8, max_length=128)
+    email: EmailStr | None = None
+    mobile: str | None = Field(default="0000000000", max_length=20)
+    password: str = Field(min_length=4, max_length=128)
 
 
 class VerifySignupOTPRequest(BaseModel):
@@ -16,7 +16,8 @@ class VerifySignupOTPRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    name: str | None = None
+    email: str | None = None
     password: str
 
 

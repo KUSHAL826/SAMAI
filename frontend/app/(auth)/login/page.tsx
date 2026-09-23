@@ -9,7 +9,7 @@ import { api, saveToken, ApiError } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ email: "", password: "" });
+  const [form, setForm] = useState({ name: "", password: "" });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -18,35 +18,37 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const res = await api.post<{ access_token: string }>("/api/v1/auth/login", form);
+      const res = await api.post<{ access_token: string }>("/api/v1/auth/login", {
+        name: form.name.trim(),
+        password: form.password,
+      });
       saveToken(res.access_token);
       router.push("/dashboard");
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not log in. Please check your credentials.");
+    } catch (err: any) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : (err?.message || "Could not log in. Please check your student name and password.")
+      );
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <AuthShell title="Log in" subtitle="Enter your email and password to access your dashboard.">
+    <AuthShell title="Student Login" subtitle="Enter your student name and password to enter.">
       <form onSubmit={handleSubmit}>
         <ErrorText message={error} />
         <Field
-          label="Email"
-          type="email"
+          label="Student Name"
+          type="text"
           required
-          value={form.email}
-          onChange={(e) => setForm({ ...form, email: e.target.value })}
+          placeholder="Enter your student name"
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
         />
-        <div className="flex justify-between items-center mb-1 mt-3">
-          <span className="text-sm font-medium text-slate">Password</span>
-          <Link href="/forgot-password" className="text-xs text-indigo underline">
-            Forgot password?
-          </Link>
-        </div>
         <Field
-          label=""
+          label="Password"
           type="password"
           required
           placeholder="Enter your password"
@@ -56,7 +58,7 @@ export default function LoginPage() {
         <SubmitButton loading={loading}>Log in</SubmitButton>
       </form>
       <p className="mt-6 text-sm text-slate">
-        New to SamAI?{" "}
+        New student?{" "}
         <Link href="/register" className="text-indigo underline">
           Create an account
         </Link>

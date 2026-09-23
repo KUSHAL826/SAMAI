@@ -9,7 +9,7 @@ from app.core.security import decode_access_token
 from app.db.models.student import Student
 from app.db.session import get_db
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/verify-login-otp")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
 async def get_current_student(

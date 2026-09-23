@@ -9,7 +9,7 @@ import { api, saveToken, ApiError } from "@/lib/api";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ name: "", email: "", mobile: "", password: "" });
+  const [form, setForm] = useState({ name: "", password: "" });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -18,7 +18,10 @@ export default function RegisterPage() {
     setError(null);
     setLoading(true);
     try {
-      const res = await api.post<{ access_token: string }>("/api/v1/auth/register", form);
+      const res = await api.post<{ access_token: string }>("/api/v1/auth/register", {
+        name: form.name.trim(),
+        password: form.password,
+      });
       saveToken(res.access_token);
       router.push("/dashboard");
     } catch (err: any) {
@@ -29,33 +32,23 @@ export default function RegisterPage() {
   }
 
   return (
-    <AuthShell title="Create your account" subtitle="Start practicing for NEET, KCET or JEE.">
+    <AuthShell title="Create Student Account" subtitle="Enter your student name and password to get started.">
       <form onSubmit={handleSubmit}>
         <ErrorText message={error} />
         <Field
-          label="Full name"
+          label="Student Name"
+          type="text"
           required
+          placeholder="Enter your student name"
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
-        />
-        <Field
-          label="Email"
-          type="email"
-          required
-          value={form.email}
-          onChange={(e) => setForm({ ...form, email: e.target.value })}
-        />
-        <Field
-          label="Mobile number"
-          required
-          value={form.mobile}
-          onChange={(e) => setForm({ ...form, mobile: e.target.value })}
         />
         <Field
           label="Password"
           type="password"
           required
-          minLength={8}
+          minLength={4}
+          placeholder="Enter a password"
           value={form.password}
           onChange={(e) => setForm({ ...form, password: e.target.value })}
         />
