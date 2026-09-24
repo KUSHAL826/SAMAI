@@ -11,6 +11,7 @@ approved source.
 SamAI/
 ├── backend/      FastAPI + Celery backend (auth, RAG generation, admin APIs)
 ├── frontend/     Next.js frontend (student + admin portals)
+├── PROCEDURE.md  Document upload order & RAG question generation procedure
 ├── supabase.md   Supabase (PostgreSQL + pgvector) setup guide
 ├── render.md     Render cloud deployment guide
 └── SETUP.md      Full setup guide (Render + Supabase & local)
@@ -18,7 +19,7 @@ SamAI/
 
 ## Quick Start
 
-See [SETUP.md](./SETUP.md), [supabase.md](./supabase.md), and [render.md](./render.md) for full deployment details.
+See [SETUP.md](./SETUP.md), [PROCEDURE.md](./PROCEDURE.md), [supabase.md](./supabase.md), and [render.md](./render.md) for full deployment and operational details.
 
 - **Database**: Hosted PostgreSQL with `pgvector` on [Supabase](./supabase.md).
 - **Deployment**: Zero-Docker cloud deployment on [Render](./render.md).
