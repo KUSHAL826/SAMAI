@@ -964,13 +964,22 @@ export default function StudentDashboardPage() {
                     ← Previous
                   </button>
                   <button
-                    disabled={testSession.activeIdx === testSession.questions.length - 1}
                     onClick={() =>
-                      setTestSession((prev) => (prev ? { ...prev, activeIdx: prev.activeIdx + 1 } : null))
+                      setTestSession((prev) =>
+                        prev ? { ...prev, activeIdx: Math.min(prev.questions.length - 1, prev.activeIdx + 1) } : null
+                      )
                     }
+                    disabled={testSession.activeIdx === testSession.questions.length - 1}
                     className="px-4 py-2 bg-ink text-paper text-xs font-medium hover:bg-indigo disabled:opacity-40"
                   >
                     Next Question →
+                  </button>
+                  <button
+                    onClick={() => submitTestAnswers(testSession)}
+                    disabled={submittingTest}
+                    className="px-4 py-2 bg-emerald-700 text-white font-bold text-xs hover:bg-emerald-800 transition-colors shadow-sm flex items-center gap-1"
+                  >
+                    <span>✅</span> {submittingTest ? "Evaluating..." : "Submit Test"}
                   </button>
                 </div>
               </div>
@@ -1021,7 +1030,14 @@ export default function StudentDashboardPage() {
                 })}
               </div>
 
-              <div className="mt-6 pt-4 border-t border-line">
+              <div className="mt-6 pt-4 border-t border-line space-y-2">
+                <button
+                  onClick={() => submitTestAnswers(testSession)}
+                  disabled={submittingTest}
+                  className="w-full py-2.5 bg-emerald-700 text-white font-bold text-xs hover:bg-emerald-800 transition-all shadow-sm flex items-center justify-center gap-1.5 rounded-sm"
+                >
+                  <span>✅</span> {submittingTest ? "Evaluating Answers & Scorecard..." : "Submit Test & View Results"}
+                </button>
                 <button
                   onClick={() => setTestSession(null)}
                   className="w-full py-2 border border-red-300 text-red-700 text-xs font-medium hover:bg-red-50"
@@ -1592,16 +1608,16 @@ export default function StudentDashboardPage() {
                     <button
                       onClick={() =>
                         startTest({
-                          title: `${activePattern.code} Full-Length CBT Mock Test (All Topics) [${activePattern.name}]`,
+                          title: `${activePattern.code} Official Blueprint Mock Test (${activePattern.totalQuestions} Qs) [${activePattern.name}]`,
                           mode: "full_length",
-                          count: activePattern.totalQuestions > 90 ? 45 : 30,
-                          durationMins: 60,
+                          count: activePattern.totalQuestions,
+                          durationMins: activePattern.durationMins,
                         })
                       }
                       disabled={loadingTest}
                       className="w-full bg-indigo text-paper py-3 text-xs font-bold hover:bg-ink transition-colors disabled:opacity-50 shadow-sm"
                     >
-                      {loadingTest ? "Generating Full Test..." : `🚀 Launch Full ${activePattern.code} Exam (${activePattern.name})`}
+                      {loadingTest ? "Generating Full Test..." : `🚀 Launch Official ${activePattern.code} Pattern Exam (${activePattern.totalQuestions} Qs)`}
                     </button>
                   </div>
 
