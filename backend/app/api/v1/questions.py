@@ -320,6 +320,41 @@ async def create_mock_test(
             except Exception as e:
                 print(f"[ON-THE-FLY INDEXING NOTICE] {e}")
 
+    # Check if Knowledge Base contains uploaded syllabus content for this topic / exam
+    has_topic_chunks = False
+    if topic_ids and len(topic_ids) > 0:
+        topic_uuids = [uuid.UUID(str(t)) for t in topic_ids if t]
+        if topic_uuids:
+            chunk_cnt = await db.execute(
+                select(func.count(DocumentChunk.id)).where(DocumentChunk.topic_id.in_(topic_uuids))
+            )
+            if chunk_cnt.scalar_one() > 0:
+                has_topic_chunks = True
+
+    if not has_topic_chunks and exam_type_id and str(exam_type_id) != "all":
+        try:
+            ex_uuid = uuid.UUID(str(exam_type_id))
+            chunk_cnt = await db.execute(
+                select(func.count(DocumentChunk.id)).where(DocumentChunk.exam_type_id == ex_uuid)
+            )
+            if chunk_cnt.scalar_one() > 0:
+                has_topic_chunks = True
+        except ValueError:
+            pass
+
+    if not has_topic_chunks:
+        global_chunk_cnt = await db.execute(select(func.count(DocumentChunk.id)))
+        if global_chunk_cnt.scalar_one() > 0:
+            has_topic_chunks = True
+
+    # If Knowledge Base has NO content chunks for topic/exam AND QuestionBank has no questions
+    if not has_topic_chunks and len(bank_questions) == 0:
+        target_tname = topic_name or "this topic"
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Exam will be available soon! Reference syllabus content for '{target_tname}' has not yet been uploaded to the Knowledge Base by the administrator.",
+        )
+
     # 2. RAG Extraction from Admin Uploaded Textbooks & PYQs
     if needed > 0:
         chunk_query = select(DocumentChunk.content)

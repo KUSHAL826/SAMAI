@@ -194,6 +194,8 @@ export default function StudentDashboardPage() {
   // CBT Test Engine State
   const [testSession, setTestSession] = useState<{
     title: string;
+    examCode?: string;
+    examName?: string;
     questions: TestQuestion[];
     activeIdx: number;
     userAnswers: Record<string, string>;
@@ -463,6 +465,8 @@ export default function StudentDashboardPage() {
 
       setTestSession({
         title: options.title,
+        examCode: activePattern.code,
+        examName: activePattern.name,
         questions: res.questions,
         activeIdx: 0,
         userAnswers: {},
@@ -804,6 +808,11 @@ export default function StudentDashboardPage() {
         <div className="mx-auto max-w-7xl px-6 pt-6">
           <div className="border border-line bg-ink text-paper p-4 flex flex-wrap items-center justify-between gap-4 mb-6 shadow-md">
             <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="bg-amber text-ink text-[10px] font-extrabold uppercase px-2 py-0.5 rounded shadow-sm">
+                  Generated For: {testSession.examName || activePattern.name} ({testSession.examCode || activePattern.code})
+                </span>
+              </div>
               <h1 className="font-serif text-xl font-bold text-paper">{testSession.title}</h1>
               <p className="text-xs text-paper/70 mt-0.5">
                 Question {testSession.activeIdx + 1} of {testSession.questions.length} | Pattern: {activePattern.markingScheme}
@@ -1389,14 +1398,25 @@ export default function StudentDashboardPage() {
           {/* MAIN CONTENT WORKSPACE */}
           <div className="flex-1 min-w-0">
             {error && (
-              <div className="mb-6 p-4 border border-red-300 bg-red-50 text-red-800 text-xs font-medium rounded flex items-center justify-between shadow-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">⚠️</span>
-                  <span>{error}</span>
+              <div
+                className={`mb-6 p-4 border rounded shadow-sm flex items-start justify-between gap-3 ${
+                  error.includes("available soon")
+                    ? "border-amber-400 bg-amber-50 text-amber-950"
+                    : "border-red-300 bg-red-50 text-red-800"
+                }`}
+              >
+                <div className="flex items-start gap-2.5 text-xs font-medium leading-relaxed">
+                  <span className="text-lg leading-none">{error.includes("available soon") ? "📢" : "⚠️"}</span>
+                  <div>
+                    <strong className="block text-sm font-bold mb-0.5">
+                      {error.includes("available soon") ? "Exam Will Be Available Soon!" : "Notice"}
+                    </strong>
+                    <span>{error}</span>
+                  </div>
                 </div>
                 <button
                   onClick={() => setError(null)}
-                  className="text-red-600 hover:text-red-900 font-bold px-2 py-1"
+                  className="text-slate hover:text-ink font-bold px-2 py-0.5 text-sm"
                 >
                   ✕
                 </button>
@@ -1553,18 +1573,23 @@ export default function StudentDashboardPage() {
                 <div className="grid sm:grid-cols-2 gap-6">
                   <div className="border border-line bg-paper p-6 shadow-sm flex flex-col justify-between hover:border-indigo transition-colors">
                     <div>
-                      <span className="text-3xl mb-2 block">🎓</span>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-3xl">🎓</span>
+                        <span className="bg-indigo/10 border border-indigo/30 text-indigo text-[11px] font-extrabold px-2.5 py-1 rounded">
+                          Target Exam: {activePattern.code} ({activePattern.name})
+                        </span>
+                      </div>
                       <h3 className="font-serif text-xl font-bold text-ink mb-2">
-                        Complete {activePattern.code} Full Syllabus Mock Test
+                        Complete {activePattern.name} ({activePattern.code}) Full Syllabus Mock Test
                       </h3>
                       <p className="text-xs text-slate leading-relaxed mb-6">
-                        Complete timed mock exam covering <strong>All Topics</strong> across Physics, Chemistry, Biology & Math according to official exam blueprint.
+                        Complete timed mock exam generated for <strong>{activePattern.name} ({activePattern.code})</strong> covering <strong>All Topics</strong> across Physics, Chemistry, Biology & Math according to official exam blueprint.
                       </p>
                     </div>
                     <button
                       onClick={() =>
                         startTest({
-                          title: `${activePattern.code} Full-Length CBT Mock Test (All Topics)`,
+                          title: `${activePattern.code} Full-Length CBT Mock Test (All Topics) [${activePattern.name}]`,
                           mode: "full_length",
                           count: activePattern.totalQuestions > 90 ? 45 : 30,
                           durationMins: 60,
@@ -1573,7 +1598,7 @@ export default function StudentDashboardPage() {
                       disabled={loadingTest}
                       className="w-full bg-indigo text-paper py-3 text-xs font-bold hover:bg-ink transition-colors disabled:opacity-50 shadow-sm"
                     >
-                      {loadingTest ? "Generating Full Test..." : `🚀 Launch Full ${activePattern.code} Exam (All Topics)`}
+                      {loadingTest ? "Generating Full Test..." : `🚀 Launch Full ${activePattern.code} Exam (${activePattern.name})`}
                     </button>
                   </div>
 
