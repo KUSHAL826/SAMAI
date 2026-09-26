@@ -207,7 +207,7 @@ async def get_knowledge_base_options(db: AsyncSession = Depends(get_db)):
 
 @router.post("/mock-test")
 async def create_mock_test(
-    payload: GenerationRequest | dict,
+    payload: dict,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -221,8 +221,9 @@ async def create_mock_test(
     from app.db.models.question import Difficulty, QuestionType
     from app.rag.generator import generate_questions
     from app.rag.prompts import build_generation_prompt
+    from sqlalchemy import or_
 
-    data = payload if isinstance(payload, dict) else payload.model_dump()
+    data = payload if isinstance(payload, dict) else {}
     mode = data.get("mode", "topic")
     count = int(data.get("question_count") or data.get("count") or 15)
     exam_type_id = data.get("exam_type_id")
@@ -231,13 +232,24 @@ async def create_mock_test(
     topic_name = data.get("topic_name")
     difficulty = data.get("difficulty", "mixed")
 
-    # Safe UUID Parsing (filters out "all", empty strings, or invalid UUIDs)
+    # Safe UUID Parsing with name/code lookup fallback
     valid_exam_uuid = None
     if exam_type_id and str(exam_type_id) != "all":
         try:
             valid_exam_uuid = uuid.UUID(str(exam_type_id))
         except (ValueError, TypeError):
-            pass
+            clean_ex_str = str(exam_type_id).strip().lower()
+            ex_res = await db.execute(
+                select(ExamType).where(
+                    or_(
+                        func.lower(ExamType.code).like(f"%{clean_ex_str}%"),
+                        func.lower(ExamType.name).like(f"%{clean_ex_str}%"),
+                    )
+                )
+            )
+            found_ex = ex_res.scalars().first()
+            if found_ex:
+                valid_exam_uuid = found_ex.id
 
     valid_topic_uuids = []
     if topic_ids:
@@ -247,7 +259,14 @@ async def create_mock_test(
                 try:
                     valid_topic_uuids.append(uuid.UUID(str(t)))
                 except (ValueError, TypeError):
-                    pass
+                    clean_t_str = str(t).strip().lower()
+                    t_res = await db.execute(
+                        select(Topic.id).where(
+                            func.lower(Topic.name).like(f"%{clean_t_str}%")
+                        )
+                    )
+                    matching_t = t_res.scalars().all()
+                    valid_topic_uuids.extend(matching_t)
 
     valid_subj_uuids = []
     if subject_ids:
@@ -257,11 +276,17 @@ async def create_mock_test(
                 try:
                     valid_subj_uuids.append(uuid.UUID(str(s)))
                 except (ValueError, TypeError):
-                    pass
+                    clean_s_str = str(s).strip().lower()
+                    s_res = await db.execute(
+                        select(Subject.id).where(
+                            func.lower(Subject.name).like(f"%{clean_s_str}%")
+                        )
+                    )
+                    matching_s = s_res.scalars().all()
+                    valid_subj_uuids.extend(matching_s)
 
     # If topic_name passed without IDs, search Topic table
     if topic_name and not valid_topic_uuids:
-        from sqlalchemy import func
         t_res = await db.execute(select(Topic).where(func.lower(Topic.name).like(f"%{topic_name.strip().lower()}%")))
         matching_topics = t_res.scalars().all()
         if matching_topics:
