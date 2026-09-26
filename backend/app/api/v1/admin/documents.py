@@ -178,7 +178,16 @@ async def upload_document(
         await db.commit()
         await db.refresh(job)
 
-        process_document.delay(str(document.id))
+        # Process document immediately in-process so chunks & embeddings are ready right away
+        try:
+            process_document.apply(args=[str(document.id)])
+        except Exception as exc:
+            print(f"[DOCUMENT IMMEDIATE PROCESSING NOTICE] {exc}")
+            try:
+                process_document.delay(str(document.id))
+            except Exception:
+                pass
+
         created_docs.append(document)
         last_job = job
 

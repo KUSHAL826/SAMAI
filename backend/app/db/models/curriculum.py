@@ -17,7 +17,9 @@ class ExamType(Base, UUIDPKMixin, TimestampMixin):
     code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)  # e.g. "NEET"
     name: Mapped[str] = mapped_column(String(100), nullable=False)
 
-    subjects: Mapped[list["Subject"]] = relationship(back_populates="exam_type")
+    subjects: Mapped[list["Subject"]] = relationship(
+        back_populates="exam_type", cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 class Subject(Base, UUIDPKMixin, TimestampMixin):
@@ -30,7 +32,9 @@ class Subject(Base, UUIDPKMixin, TimestampMixin):
     name: Mapped[str] = mapped_column(String(100), nullable=False)  # Physics, Chemistry, ...
 
     exam_type: Mapped["ExamType"] = relationship(back_populates="subjects")
-    chapters: Mapped[list["Chapter"]] = relationship(back_populates="subject")
+    chapters: Mapped[list["Chapter"]] = relationship(
+        back_populates="subject", cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 class Chapter(Base, UUIDPKMixin, TimestampMixin):
@@ -43,7 +47,9 @@ class Chapter(Base, UUIDPKMixin, TimestampMixin):
     order_index: Mapped[int] = mapped_column(default=0)
 
     subject: Mapped["Subject"] = relationship(back_populates="chapters")
-    topics: Mapped[list["Topic"]] = relationship(back_populates="chapter")
+    topics: Mapped[list["Topic"]] = relationship(
+        back_populates="chapter", cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 class Topic(Base, UUIDPKMixin, TimestampMixin):

@@ -139,7 +139,7 @@ async def list_exam_types(db: AsyncSession = Depends(get_db)):
 
 @router.delete("/exam-types/{exam_type_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_exam_type(exam_type_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    from app.db.models.curriculum import Subject
+    from app.db.models.curriculum import Subject, Chapter, Topic
     from app.db.models.document import Document, DocumentChunk
     from app.db.models.pattern import ExamPattern
     from app.db.models.question import QuestionBank
@@ -151,19 +151,33 @@ async def delete_exam_type(exam_type_id: uuid.UUID, db: AsyncSession = Depends(g
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Exam type not found.")
 
     try:
-        # Delete dependent records in database order to satisfy foreign keys
+        # 1. Delete attempts, patterns, question bank, document chunks, documents
         await db.execute(delete(ExamAttempt).where(ExamAttempt.exam_type_id == exam_type_id))
         await db.execute(delete(ExamPattern).where(ExamPattern.exam_type_id == exam_type_id))
         await db.execute(delete(QuestionBank).where(QuestionBank.exam_type_id == exam_type_id))
         await db.execute(delete(DocumentChunk).where(DocumentChunk.exam_type_id == exam_type_id))
         await db.execute(delete(Document).where(Document.exam_type_id == exam_type_id))
 
-        subjs_res = await db.execute(select(Subject).where(Subject.exam_type_id == exam_type_id))
-        subjs = subjs_res.scalars().all()
-        for s in subjs:
-            await db.delete(s)
+        # 2. Get subject IDs for this exam
+        subjs_res = await db.execute(select(Subject.id).where(Subject.exam_type_id == exam_type_id))
+        subj_ids = subjs_res.scalars().all()
 
-        await db.delete(exam_type)
+        if subj_ids:
+            # 3. Get chapter IDs for these subjects
+            chaps_res = await db.execute(select(Chapter.id).where(Chapter.subject_id.in_(subj_ids)))
+            chap_ids = chaps_res.scalars().all()
+
+            if chap_ids:
+                # 4. Direct SQL delete topics
+                await db.execute(delete(Topic).where(Topic.chapter_id.in_(chap_ids)))
+                # 5. Direct SQL delete chapters
+                await db.execute(delete(Chapter).where(Chapter.subject_id.in_(subj_ids)))
+
+            # 6. Direct SQL delete subjects
+            await db.execute(delete(Subject).where(Subject.exam_type_id == exam_type_id))
+
+        # 7. Direct SQL delete exam_type
+        await db.execute(delete(ExamType).where(ExamType.id == exam_type_id))
         await db.commit()
     except Exception as err:
         await db.rollback()

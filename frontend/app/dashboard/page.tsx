@@ -1318,16 +1318,21 @@ export default function StudentDashboardPage() {
               <button
                 disabled={!customTopicInput.trim() || loadingTest}
                 onClick={() => {
+                  const matchedTopic = availableKnowledgeTopics
+                    .flatMap((c: any) => c.topics || [])
+                    .find((t: any) => t.name.toLowerCase() === customTopicInput.trim().toLowerCase());
+
                   startTest({
                     title: `Topic Exam: ${customTopicInput.trim()} (${topicQuestionPoolSize} Qs)`,
                     mode: "topic",
+                    topicIds: matchedTopic ? [matchedTopic.id] : [],
                     topicName: customTopicInput.trim(),
                     count: topicQuestionPoolSize,
                   });
                 }}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-paper text-xs font-bold py-2.5 transition-colors disabled:opacity-40 shadow-sm"
               >
-                {loadingTest ? "Generating Exam..." : `⚡ Launch Topic Exam (${topicQuestionPoolSize} Qs)`}
+                {loadingTest ? "⚡ Launching Grounded Exam..." : `⚡ Launch Topic Exam (${topicQuestionPoolSize} Qs)`}
               </button>
             </div>
 
@@ -1383,6 +1388,20 @@ export default function StudentDashboardPage() {
 
           {/* MAIN CONTENT WORKSPACE */}
           <div className="flex-1 min-w-0">
+            {error && (
+              <div className="mb-6 p-4 border border-red-300 bg-red-50 text-red-800 text-xs font-medium rounded flex items-center justify-between shadow-sm">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">⚠️</span>
+                  <span>{error}</span>
+                </div>
+                <button
+                  onClick={() => setError(null)}
+                  className="text-red-600 hover:text-red-900 font-bold px-2 py-1"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
             {activeTab === "topic_exams" ? (
               /* TAB 1: TOPIC-WISE EXAM GENERATOR (1000 QUESTIONS POOL) */
               <div className="space-y-6">
