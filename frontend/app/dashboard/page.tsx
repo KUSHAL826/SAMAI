@@ -24,6 +24,7 @@ type TestQuestion = {
   difficulty: string;
   subject_id: string;
   topic_id: string;
+  subject_name?: string;
   correct_answer?: string;
   explanation?: string;
 };
@@ -178,11 +179,13 @@ export default function StudentDashboardPage() {
     questions: TestQuestion[];
     activeIdx: number;
     userAnswers: Record<string, string>;
+    checkedResponses: Record<string, { is_correct: boolean; correct_answer: string; explanation: string }>;
     markedReview: Record<string, boolean>;
     timeRemaining: number;
     startTime: number;
     subjectTabs: string[];
     activeSubjectTab: string;
+    isTopicMapMode?: boolean;
   } | null>(null);
 
   const [testResult, setTestResult] = useState<TestResult | null>(null);
@@ -443,6 +446,7 @@ export default function StudentDashboardPage() {
     topicName?: string;
     count?: number;
     durationMins?: number;
+    isTopicMapMode?: boolean;
   }) {
     setLoadingTest(true);
     setError(null);
@@ -509,11 +513,13 @@ export default function StudentDashboardPage() {
         questions: res.questions,
         activeIdx: 0,
         userAnswers: {},
+        checkedResponses: {},
         markedReview: {},
         timeRemaining: duration,
         startTime: Date.now(),
         subjectTabs: uniqueSubjNames,
         activeSubjectTab: uniqueSubjNames[0] || "General",
+        isTopicMapMode: options.isTopicMapMode ?? (options.mode === "topic" || options.mode === "multi_topic"),
       });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to generate test.");
@@ -916,6 +922,61 @@ export default function StudentDashboardPage() {
             </div>
           </div>
 
+          {/* TOPIC PROGRESSION ROADMAP MAP BAR IN TEST SESSION */}
+          {testSession.isTopicMapMode && (
+            <div className="mb-6 border border-indigo/30 bg-indigo/5 p-4 rounded space-y-2">
+              <div className="flex items-center justify-between border-b border-indigo/20 pb-2">
+                <span className="text-xs font-bold text-indigo uppercase flex items-center gap-1.5">
+                  <span>🗺️</span> Topic Learning Roadmap Progression Map (Topic 1 ➔ Topic 2 ➔ Topic 3)
+                </span>
+                <span className="text-[10px] font-mono bg-indigo text-paper px-2 py-0.5 rounded font-bold">
+                  {testSession.questions.length} Map Nodes
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                {testSession.questions.map((qItem, qIdx) => {
+                  const isCurrentNode = qIdx === testSession.activeIdx;
+                  const checkedState = testSession.checkedResponses?.[qItem.id];
+
+                  let nodeColor = "border-line bg-white text-slate hover:border-indigo";
+                  let badgeText = `Topic ${qIdx + 1}`;
+
+                  if (isCurrentNode) {
+                    nodeColor = "border-indigo bg-indigo text-paper font-bold shadow-md ring-2 ring-indigo/40";
+                    badgeText = `🎯 Topic ${qIdx + 1}`;
+                  } else if (checkedState?.is_correct) {
+                    nodeColor = "border-emerald-500 bg-emerald-50 text-emerald-900 font-bold";
+                    badgeText = `✓ Topic ${qIdx + 1}`;
+                  } else if (checkedState && !checkedState.is_correct) {
+                    nodeColor = "border-amber-500 bg-amber-50 text-amber-900 font-bold";
+                    badgeText = `⚠️ Topic ${qIdx + 1}`;
+                  }
+
+                  return (
+                    <div key={qItem.id} className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setTestSession((prev) => (prev ? { ...prev, activeIdx: qIdx } : null))}
+                        className={`p-2 border rounded text-xs transition-all min-w-[130px] text-left ${nodeColor}`}
+                      >
+                        <div className="flex justify-between items-center mb-0.5">
+                          <span className="text-[10px] font-mono uppercase font-bold">{badgeText}</span>
+                        </div>
+                        <span className="text-[11px] block truncate font-medium" title={qItem.question_text}>
+                          Q{qIdx + 1}: {qItem.subject_name || "Concept"}
+                        </span>
+                      </button>
+                      {qIdx < testSession.questions.length - 1 && (
+                        <span className="text-indigo font-bold text-sm px-0.5 select-none">➔</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-2 border-b border-line mb-6 overflow-x-auto pb-2">
             {testSession.subjectTabs.map((subName) => (
               <button
@@ -950,15 +1011,29 @@ export default function StudentDashboardPage() {
                   {testSession.questions[testSession.activeIdx]?.question_text}
                 </h2>
 
-                <div className="space-y-3 mb-8">
+                <div className="space-y-3 mb-6">
                   {Object.entries(testSession.questions[testSession.activeIdx]?.options || {}).map(
                     ([optKey, optVal]) => {
                       const qId = testSession.questions[testSession.activeIdx].id;
                       const isSelected = testSession.userAnswers[qId] === optKey;
+                      const checkedInfo = testSession.checkedResponses?.[qId];
+
+                      let optStyle = "border-line bg-paper text-slate hover:border-ink hover:text-ink";
+                      if (checkedInfo) {
+                        if (optKey === checkedInfo.correct_answer) {
+                          optStyle = "border-emerald-500 bg-emerald-50 text-emerald-900 font-bold ring-2 ring-emerald-500";
+                        } else if (isSelected && !checkedInfo.is_correct) {
+                          optStyle = "border-red-500 bg-red-50 text-red-900 font-bold ring-2 ring-red-400";
+                        }
+                      } else if (isSelected) {
+                        optStyle = "border-indigo bg-indigo/10 text-indigo font-medium shadow-sm ring-1 ring-indigo";
+                      }
+
                       return (
                         <div
                           key={optKey}
                           onClick={() => {
+                            if (checkedInfo) return; // Prevent changing after response checked
                             setTestSession((prev) => {
                               if (!prev) return null;
                               return {
@@ -967,15 +1042,19 @@ export default function StudentDashboardPage() {
                               };
                             });
                           }}
-                          className={`cursor-pointer p-4 border transition-all flex items-start gap-3 ${
-                            isSelected
-                              ? "border-indigo bg-indigo/10 text-indigo font-medium shadow-sm ring-1 ring-indigo"
-                              : "border-line bg-paper text-slate hover:border-ink hover:text-ink"
-                          }`}
+                          className={`p-4 border transition-all flex items-start gap-3 rounded ${
+                            checkedInfo ? "cursor-default" : "cursor-pointer"
+                          } ${optStyle}`}
                         >
                           <span
                             className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold border ${
-                              isSelected ? "bg-indigo text-paper border-indigo" : "border-slate text-slate"
+                              checkedInfo?.correct_answer === optKey
+                                ? "bg-emerald-600 text-paper border-emerald-600"
+                                : isSelected && !checkedInfo?.is_correct && checkedInfo
+                                ? "bg-red-600 text-paper border-red-600"
+                                : isSelected
+                                ? "bg-indigo text-paper border-indigo"
+                                : "border-slate text-slate"
                             }`}
                           >
                             {optKey}
@@ -986,6 +1065,120 @@ export default function StudentDashboardPage() {
                     }
                   )}
                 </div>
+
+                {/* INSTANT CHECK ANSWER & GROUNDED TOPIC CONCEPT EXPLANATION BANNER */}
+                {(() => {
+                  const currentQ = testSession.questions[testSession.activeIdx];
+                  if (!currentQ) return null;
+                  const qId = currentQ.id;
+                  const currentAns = testSession.userAnswers[qId];
+                  const checkedInfo = testSession.checkedResponses?.[qId];
+
+                  if (!checkedInfo && currentAns) {
+                    return (
+                      <div className="mb-6">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const correctAns = currentQ.correct_answer || "A";
+                            const isAnsMatch = currentAns.trim().toUpperCase() === correctAns.trim().toUpperCase();
+
+                            setTestSession((prev) => {
+                              if (!prev) return null;
+                              return {
+                                ...prev,
+                                checkedResponses: {
+                                  ...prev.checkedResponses,
+                                  [qId]: {
+                                    is_correct: isAnsMatch,
+                                    correct_answer: correctAns,
+                                    explanation: currentQ.explanation || "Grounded concept explanation for this topic.",
+                                  },
+                                },
+                              };
+                            });
+                          }}
+                          className="w-full bg-indigo text-paper py-3 font-bold text-xs hover:bg-ink transition-colors shadow rounded flex items-center justify-center gap-2"
+                        >
+                          <span>🎯 Check Answer & Validate Topic Concept</span>
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  if (checkedInfo) {
+                    return checkedInfo.is_correct ? (
+                      <div className="mb-6 p-4 bg-emerald-50 border border-emerald-300 rounded text-emerald-900 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 font-bold text-sm">
+                            <span className="text-xl">🎉</span>
+                            <span>Correct Answer! (+4 Marks)</span>
+                          </div>
+                          <span className="text-[10px] font-mono bg-emerald-700 text-white px-2 py-0.5 rounded font-bold">
+                            Topic Mastered ✓
+                          </span>
+                        </div>
+                        <p className="text-xs text-emerald-800 leading-relaxed bg-white/70 p-3 border border-emerald-200 rounded">
+                          <strong>Grounded Concept Takeaway:</strong> {checkedInfo.explanation}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTestSession((prev) =>
+                              prev ? { ...prev, activeIdx: Math.min(prev.questions.length - 1, prev.activeIdx + 1) } : null
+                            )
+                          }
+                          disabled={testSession.activeIdx === testSession.questions.length - 1}
+                          className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded hover:bg-emerald-800 transition-colors shadow disabled:opacity-50"
+                        >
+                          Next Topic Question ➔
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="mb-6 p-5 bg-amber-50 border border-amber-300 rounded text-amber-950 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 font-bold text-sm text-amber-900">
+                            <span className="text-xl">⚠️</span>
+                            <span>Incorrect Choice — Grounded Topic Concept Explanation</span>
+                          </div>
+                          <span className="text-[10px] font-mono bg-amber-700 text-white px-2 py-0.5 rounded font-bold">
+                            Needs Review
+                          </span>
+                        </div>
+
+                        <div className="text-xs bg-white p-4 border border-amber-200 rounded text-ink leading-relaxed space-y-2 shadow-sm">
+                          <div className="flex items-center gap-2 border-b border-amber-100 pb-2">
+                            <span className="text-xs font-bold text-slate">Correct Answer:</span>
+                            <span className="font-mono text-sm font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                              Option ({checkedInfo.correct_answer})
+                            </span>
+                          </div>
+                          <div>
+                            <strong className="text-indigo uppercase block mb-1 font-mono text-[11px]">
+                              📖 Topic Concept & Solution Breakdown:
+                            </strong>
+                            <p className="text-slate text-xs leading-relaxed">{checkedInfo.explanation}</p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTestSession((prev) =>
+                              prev ? { ...prev, activeIdx: Math.min(prev.questions.length - 1, prev.activeIdx + 1) } : null
+                            )
+                          }
+                          disabled={testSession.activeIdx === testSession.questions.length - 1}
+                          className="px-4 py-2.5 bg-indigo text-paper text-xs font-bold rounded hover:bg-ink transition-colors shadow disabled:opacity-50"
+                        >
+                          Review Concept & Continue to Next Topic Question ➔
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return null;
+                })()}
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3 pt-6 border-t border-line">
