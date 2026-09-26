@@ -558,23 +558,109 @@ async def create_mock_test(
             }
         ]
 
+        # Subject Priority Order for Entrance Exams: Physics -> Chemistry -> Mathematics -> Biology
+        subj_order_rank = {
+            "physics": 1,
+            "chemistry": 2,
+            "mathematics": 3,
+            "maths": 3,
+            "math": 3,
+            "biology": 4,
+            "botany": 4,
+            "zoology": 4,
+        }
+
+        # Fetch subject name map for subject_ids in questions_out
+        subj_id_map: dict[str, str] = {}
+        all_s_uuids = [uuid.UUID(q["subject_id"]) for q in questions_out if q.get("subject_id")]
+        if all_s_uuids:
+            s_rows = await db.execute(select(Subject).where(Subject.id.in_(all_s_uuids)))
+            for s_item in s_rows.scalars().all():
+                subj_id_map[str(s_item.id)] = s_item.name
+
         for i in range(needed_gen):
             q_id = str(uuid.uuid4())
             tmpl = subject_templates[i % len(subject_templates)]
             q_text = tmpl["question"].format(topic=target_tname)
             
+            # Dynamically determine subject name from index or target topic
+            if i % 4 == 0:
+                s_name = "Physics"
+            elif i % 4 == 1:
+                s_name = "Chemistry"
+            elif i % 4 == 2:
+                s_name = "Mathematics"
+            else:
+                s_name = "Biology"
+
+            raw_opts = dict(tmpl["options"])
+            orig_ans = tmpl["correct"]
+            correct_val = raw_opts.get(orig_ans)
+            
+            # Unpredictable option shuffling across A, B, C, D
+            opt_vals = list(raw_opts.values())
+            random.shuffle(opt_vals)
+            keys = ["A", "B", "C", "D"]
+            shuffled_options = {keys[k_idx]: opt_vals[k_idx] for k_idx in range(4)}
+            
+            new_correct_key = "A"
+            for k_key, v_val in shuffled_options.items():
+                if v_val == correct_val:
+                    new_correct_key = k_key
+                    break
+
             questions_out.append({
                 "id": q_id,
-                "question_text": f"Q{len(questions_out)+1}. {q_text}",
-                "options": tmpl["options"],
+                "question_text": q_text,
+                "options": shuffled_options,
                 "difficulty": difficulty if difficulty != "mixed" else "moderate",
                 "topic_id": str(valid_topic_uuids[0]) if valid_topic_uuids else None,
                 "subject_id": str(valid_subj_uuids[0]) if valid_subj_uuids else None,
-                "correct_answer": tmpl["correct"],
+                "subject_name": s_name,
+                "correct_answer": new_correct_key,
                 "explanation": f"Grounded Syllabus Explanation for {target_tname}: {tmpl['explanation']}",
             })
 
-    random.shuffle(questions_out)
+    # Shuffle options for existing question bank items to guarantee non-predictability
+    for q in questions_out:
+        if "subject_name" not in q or not q["subject_name"]:
+            s_id = q.get("subject_id")
+            q["subject_name"] = subj_id_map.get(s_id, "General Syllabus") if s_id else "General Syllabus"
+
+        # Shuffle options unpredictably if not already shuffled
+        raw_opts = dict(q.get("options", {}))
+        orig_ans = q.get("correct_answer", "A")
+        if len(raw_opts) == 4:
+            correct_val = raw_opts.get(orig_ans)
+            opt_vals = list(raw_opts.values())
+            random.shuffle(opt_vals)
+            keys = ["A", "B", "C", "D"]
+            shuffled_opts = {keys[k_idx]: opt_vals[k_idx] for k_idx in range(4)}
+            new_ans = "A"
+            for k_key, v_val in shuffled_opts.items():
+                if v_val == correct_val:
+                    new_ans = k_key
+                    break
+            q["options"] = shuffled_opts
+            q["correct_answer"] = new_ans
+
+    # Sort questions by Entrance Exam Subject Order (Physics -> Chemistry -> Mathematics -> Biology)
+    def get_subj_rank(q_item):
+        s_name_lower = str(q_item.get("subject_name", "")).strip().lower()
+        for k_sub, r_rank in subj_order_rank.items():
+            if k_sub in s_name_lower:
+                return r_rank
+        return 99
+
+    questions_out.sort(key=get_subj_rank)
+
+    # Re-number question text cleanly (Q1., Q2., Q3. ...)
+    for idx, q in enumerate(questions_out):
+        clean_text = q["question_text"]
+        if clean_text.startswith("Q") and "." in clean_text[:6]:
+            clean_text = clean_text.split(".", 1)[1].strip()
+        q["question_text"] = clean_text
+
     selected_questions = questions_out[:count]
 
     return {
@@ -744,9 +830,24 @@ async def download_mock_paper(
     mock_res = await create_mock_test(payload, db)
     questions = mock_res.get("questions", [])
 
-    # Format 1: Test Paper HTML Content
+    # Format 1: Test Paper HTML Content with Subject Section Headers
     q_html_items = []
+    current_subject = None
+    section_counter = 1
+
     for idx, q in enumerate(questions):
+        s_name = q.get("subject_name") or "General"
+        if s_name != current_subject:
+            current_subject = s_name
+            q_html_items.append(
+                f"""
+                <div style="background:#f1f5f9;border-left:4px solid #4f46e5;padding:8px 12px;margin:25px 0 15px 0;font-weight:bold;font-size:15px;letter-spacing:1px;text-transform:uppercase;">
+                    SECTION {section_counter}: {current_subject.upper()}
+                </div>
+                """
+            )
+            section_counter += 1
+
         opts_html = "".join(
             f"<div class='opt-box'><strong>({k})</strong> {v}</div>"
             for k, v in q.get("options", {}).items()
@@ -760,15 +861,30 @@ async def download_mock_paper(
             """
         )
 
-    # Format 2: Answer Key Matrix & Solutions HTML Content
+    # Format 2: Answer Key Matrix & Solutions HTML Content with Subject Sections
     key_matrix_items = []
     solutions_html_items = []
+    sol_subject = None
+    sol_section_counter = 1
+
     for idx, q in enumerate(questions):
-        key_matrix_items.append(f"<tr><td>Q{idx+1}</td><td><strong>{q.get('correct_answer')}</strong></td></tr>")
+        s_name = q.get("subject_name") or "General"
+        if s_name != sol_subject:
+            sol_subject = s_name
+            solutions_html_items.append(
+                f"""
+                <div style="background:#f1f5f9;border-left:4px solid #4f46e5;padding:8px 12px;margin:25px 0 15px 0;font-weight:bold;font-size:15px;letter-spacing:1px;text-transform:uppercase;">
+                    SOLUTIONS SECTION {sol_section_counter}: {sol_subject.upper()}
+                </div>
+                """
+            )
+            sol_section_counter += 1
+
+        key_matrix_items.append(f"<tr><td>Q{idx+1} ({s_name[:3].upper()})</td><td><strong>{q.get('correct_answer')}</strong></td></tr>")
         solutions_html_items.append(
             f"""
             <div class="sol-block">
-                <p class="q-title"><strong>Q{idx+1}.</strong> {q.get('question_text')}</p>
+                <p class="q-title"><strong>Q{idx+1}.</strong> [{s_name}] {q.get('question_text')}</p>
                 <p class="ans-key"><strong>Correct Answer: ({q.get('correct_answer')})</strong></p>
                 <p class="explanation"><strong>Detailed Solution:</strong> {q.get('explanation')}</p>
             </div>

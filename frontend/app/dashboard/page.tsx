@@ -509,6 +509,7 @@ export default function StudentDashboardPage() {
       );
 
       setTestResult(res);
+      setTestSession(null);
       fetchAnalyticsData();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to calculate test scorecard.");
