@@ -1995,15 +1995,21 @@ export default function StudentDashboardPage() {
                     </select>
                   </div>
 
-                  {/* FORMAT CHOICE: STANDARD FORM VS DESIGN YOUR FORMAT */}
-                  <div className="border border-indigo/30 bg-white p-4 rounded space-y-2">
+                  {/* FORMAT CHOICE: STANDARD ADMIN PATTERN VS DESIGN YOUR FORMAT */}
+                  <div className="border border-indigo/30 bg-white p-4 rounded space-y-3">
                     <label className="text-xs font-bold text-indigo uppercase block">
                       Choose Question Paper Format *
                     </label>
                     <div className="grid sm:grid-cols-2 gap-3">
                       <button
                         type="button"
-                        onClick={() => setPaperFormatMode("standard")}
+                        onClick={() => {
+                          setPaperFormatMode("standard");
+                          if (customPatterns.length > 0) {
+                            const pat = customPatterns.find((p) => p.id === selectedPatternId) || customPatterns[0];
+                            applyAdminPattern(pat);
+                          }
+                        }}
                         className={`p-3 border text-left rounded text-xs transition-all ${
                           paperFormatMode === "standard"
                             ? "border-indigo bg-indigo text-paper font-bold shadow"
@@ -2011,13 +2017,13 @@ export default function StudentDashboardPage() {
                         }`}
                       >
                         <div className="flex justify-between items-center mb-1">
-                          <span className="font-semibold text-sm">Option 1: Standard Exam Form</span>
+                          <span className="font-semibold text-sm">Option 1: Standard Exam Blueprint</span>
                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${paperFormatMode === "standard" ? "bg-amber text-ink font-bold" : "bg-indigo/10 text-indigo"}`}>
-                            Standard Count
+                            Admin Pattern
                           </span>
                         </div>
                         <p className="text-[11px] opacity-90">
-                          Use fixed total questions dropdown (e.g. 30 Qs, 45 Qs, 90 Qs, 180 Qs) or pre-uploaded admin pattern.
+                          Use exact pattern uploaded by Admin ({customPatterns.length > 0 ? `${customPatterns.length} Admin Patterns Available` : `${activePattern.name} ${activePattern.totalQuestions} Qs`}).
                         </p>
                       </button>
 
@@ -2037,45 +2043,59 @@ export default function StudentDashboardPage() {
                           </span>
                         </div>
                         <p className="text-[11px] opacity-90">
-                          Calculate total paper count dynamically as sum of questions set per subject (e.g. 25 + 25 + 25 = 75 Qs).
+                          Set custom questions count per subject in Step 2 (e.g. Physics 25 + Chem 25 + Math 25 = 75 Qs total).
                         </p>
                       </button>
                     </div>
                   </div>
 
-                  {/* ADMIN PATTERNS SELECTION FOR DOWNLOAD */}
-                  {customPatterns.length > 0 && (
-                    <div className="border border-indigo/30 bg-white p-4 space-y-2 rounded">
+                  {/* ADMIN PATTERNS SELECTION (ONLY ADMIN CREATED PATTERNS) */}
+                  {paperFormatMode === "standard" && (
+                    <div className="border border-indigo/30 bg-indigo/5 p-4 space-y-2 rounded">
                       <label className="text-xs font-bold text-indigo uppercase block">
-                        Choose Pattern (Uploaded / Applied by Admin) *
+                        Select Admin Pattern Blueprint *
                       </label>
-                      <div className="grid sm:grid-cols-3 gap-2">
-                        {customPatterns.map((pat) => {
-                          const isSelected = selectedPatternId === pat.id;
-                          return (
-                            <button
-                              key={pat.id}
-                              type="button"
-                              onClick={() => {
-                                applyAdminPattern(pat);
-                                setPaperFormatMode("standard");
-                              }}
-                              className={`p-2.5 border text-left rounded text-xs transition-all ${
-                                isSelected
-                                  ? "border-indigo bg-indigo text-paper font-bold shadow"
-                                  : "border-line bg-paper hover:border-indigo text-slate hover:text-ink"
-                              }`}
-                            >
-                              <div className="flex justify-between items-center">
-                                <span>{pat.name}</span>
-                                <span className={`text-[10px] px-1 rounded ${isSelected ? "bg-amber text-ink" : "bg-indigo/10 text-indigo"}`}>
-                                  {pat.total_questions} Qs
-                                </span>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
+                      {customPatterns.length > 0 ? (
+                        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2">
+                          {customPatterns.map((pat) => {
+                            const isSelected = selectedPatternId === pat.id;
+                            const qSubj = pat.questions_per_subject || {};
+                            const subjSummary = Object.keys(qSubj).length > 0
+                              ? Object.entries(qSubj).map(([s, c]) => `${s}: ${c} Qs`).join(" • ")
+                              : "Core Syllabus";
+
+                            return (
+                              <button
+                                key={pat.id}
+                                type="button"
+                                onClick={() => applyAdminPattern(pat)}
+                                className={`p-3 border text-left rounded text-xs transition-all ${
+                                  isSelected
+                                    ? "border-indigo bg-indigo text-paper font-bold shadow"
+                                    : "border-line bg-white hover:border-indigo text-slate hover:text-ink"
+                                }`}
+                              >
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className="font-bold">{pat.name}</span>
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${isSelected ? "bg-amber text-ink font-bold" : "bg-indigo/10 text-indigo"}`}>
+                                    {pat.total_questions} Qs
+                                  </span>
+                                </div>
+                                <p className={`text-[11px] ${isSelected ? "text-paper/80" : "text-slate"}`}>
+                                  +{pat.positive_marks} / -{pat.negative_marks} Marks
+                                </p>
+                                <p className={`text-[10px] mt-1 font-mono ${isSelected ? "text-amber" : "text-indigo"}`}>
+                                  {subjSummary}
+                                </p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="p-3 bg-white border border-indigo/20 rounded text-xs text-ink font-medium">
+                          <span className="font-bold text-indigo">Official Admin Exam Blueprint:</span> {activePattern.name} ({activePattern.totalQuestions} Questions Total — {activePattern.subjectsHint})
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -2236,19 +2256,16 @@ export default function StudentDashboardPage() {
                           </span>
                         </div>
                       ) : (
-                        <select
-                          value={mockPaperCount}
-                          onChange={(e) => setMockPaperCount(Number(e.target.value))}
-                          className="w-full border border-line bg-white px-3 py-2 text-xs text-ink focus:outline-none font-medium"
-                        >
-                          <option value={10}>10 Questions (Quick Quiz)</option>
-                          <option value={15}>15 Questions (Classroom Unit Test)</option>
-                          <option value={30}>30 Questions (Standard Subject Mock)</option>
-                          <option value={45}>45 Questions (NEET Single Subject Mock)</option>
-                          <option value={60}>60 Questions (KCET Full Subject Mock)</option>
-                          <option value={90}>90 Questions (JEE Main Mock Paper)</option>
-                          <option value={180}>180 Questions (Full Length NEET Paper)</option>
-                        </select>
+                        <div className="w-full border border-indigo/40 bg-indigo/10 px-2.5 py-1.5 text-xs text-indigo font-bold rounded flex flex-col justify-center">
+                          <span className="text-[11px] text-ink font-bold">
+                            Admin Pattern Total: {selectedPatternId && customPatterns.find((p) => p.id === selectedPatternId) ? customPatterns.find((p) => p.id === selectedPatternId).total_questions : activePattern.totalQuestions} Qs
+                          </span>
+                          <span className="text-[10px] text-indigo font-normal truncate">
+                            ({selectedPatternId && customPatterns.find((p) => p.id === selectedPatternId) && customPatterns.find((p) => p.id === selectedPatternId).questions_per_subject
+                              ? Object.entries(customPatterns.find((p) => p.id === selectedPatternId).questions_per_subject).map(([s, c]) => `${s}: ${c} Qs`).join(" + ")
+                              : activePattern.subjectsHint})
+                          </span>
+                        </div>
                       )}
                     </div>
                     <div>
