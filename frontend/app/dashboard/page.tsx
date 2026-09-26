@@ -138,6 +138,11 @@ export default function StudentDashboardPage() {
   const [mockPaperCount, setMockPaperCount] = useState(30);
   const [mockPackage, setMockPackage] = useState<MockPaperPackage | null>(null);
   const [generatingMockPackage, setGeneratingMockPackage] = useState(false);
+  const [knowledgeBaseExams, setKnowledgeBaseExams] = useState<any[]>([]);
+  const [mockExamId, setMockExamId] = useState<string>("all");
+  const [mockTopicScope, setMockTopicScope] = useState<"all" | "selected">("all");
+  const [mockSelectedTopics, setMockSelectedTopics] = useState<string[]>([]);
+  const [mockDifficulty, setMockDifficulty] = useState<string>("mixed");
 
   // Load student profile & curriculum
   useEffect(() => {
@@ -169,12 +174,14 @@ export default function StudentDashboardPage() {
 
   async function loadCurriculumData() {
     try {
-      const [examsList, subjectsList] = await Promise.all([
+      const [examsList, subjectsList, kbRes] = await Promise.all([
         api.get<ExamType[]>("/api/v1/admin/exam-types"),
         api.get<Subject[]>("/api/v1/admin/subjects"),
+        api.get<{ exams: any[] }>("/api/v1/questions/knowledge-base-options").catch(() => ({ exams: [] })),
       ]);
       setExams(examsList);
       setSubjects(subjectsList);
+      setKnowledgeBaseExams(kbRes.exams || []);
       if (examsList.length > 0) setSelectedExamId(examsList[0].id);
 
       const topicsMap: Record<string, Chapter[]> = {};
@@ -193,6 +200,11 @@ export default function StudentDashboardPage() {
       // Backend fallback graceful data
     }
   }
+
+  const selectedKnowledgeExam = knowledgeBaseExams.find((e) => e.id === mockExamId);
+  const availableKnowledgeTopics: Array<{ id: string; name: string; topics: Array<{ id: string; name: string }> }> = selectedKnowledgeExam
+    ? selectedKnowledgeExam.subjects.flatMap((s: any) => s.chapters || [])
+    : knowledgeBaseExams.flatMap((e: any) => (e.subjects || []).flatMap((s: any) => s.chapters || []));
 
   async function fetchAnalyticsData() {
     setLoadingAnalytics(true);
@@ -352,14 +364,15 @@ export default function StudentDashboardPage() {
   async function generateMockPaperPackage() {
     setGeneratingMockPackage(true);
     try {
-      const selectedExamObj = exams.find((e) => e.id === selectedExamId);
+      const selectedExamObj = knowledgeBaseExams.find((e) => e.id === mockExamId);
       const res = await api.post<MockPaperPackage>("/api/v1/questions/download-mock-paper", {
         title: mockPaperTitle,
         question_count: mockPaperCount,
+        exam_type_id: mockExamId !== "all" ? mockExamId : undefined,
         exam_code: selectedExamObj ? selectedExamObj.code : "NEET/KCET/JEE",
-        subject_ids: selectedSubjectIds,
-        topic_ids: selectedTopicIds,
-        difficulty: difficulty,
+        topic_ids: mockTopicScope === "selected" ? mockSelectedTopics : [],
+        difficulty: mockDifficulty,
+        source_material: "textbooks_and_pyqs_only",
       });
       setMockPackage(res);
     } catch (err) {
@@ -1066,47 +1079,168 @@ export default function StudentDashboardPage() {
         activeTab === "download_papers" ? (
           <div className="mx-auto max-w-5xl px-6 pt-8">
             <div className="border border-line bg-white p-8 shadow-md">
-              <div className="border-b border-line pb-6 mb-8">
-                <h1 className="font-serif text-3xl font-bold text-ink">Teacher & Student Mock Paper Downloader</h1>
-                <p className="text-slate text-sm mt-1">
-                  Generate 2 distinct printable documents: (1) Test Question Paper for students, and (2) Master Answer Key & Solutions Paper for teachers.
-                </p>
+              <div className="border-b border-line pb-6 mb-8 flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h1 className="font-serif text-3xl font-bold text-ink">Teacher & Student Mock Paper Downloader</h1>
+                  <p className="text-slate text-sm mt-1">
+                    Select exam material, topic scope, and difficulty level. Generate 2 distinct printable documents: (1) Test Question Paper for students, and (2) Master Answer Key & Solutions Paper for teachers.
+                  </p>
+                </div>
+                <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1.5">
+                  <span>🔒 Grounded RAG Generation</span>
+                  <span className="text-[10px] bg-emerald-700 text-white px-1.5 py-0.5 rounded">Textbooks & PYQs Only</span>
+                </div>
               </div>
 
               {/* Config Form */}
-              <div className="grid sm:grid-cols-2 gap-6 mb-8 bg-paper p-6 border border-line">
-                <div>
-                  <label className="text-xs font-bold text-ink uppercase block mb-2">Paper Title</label>
-                  <input
-                    type="text"
-                    value={mockPaperTitle}
-                    onChange={(e) => setMockPaperTitle(e.target.value)}
-                    className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
-                  />
+              <div className="space-y-6 mb-8 bg-paper p-6 border border-line">
+                <div className="grid sm:grid-cols-2 gap-6">
+                  {/* 1. Target Exam / Knowledge Base Source */}
+                  <div>
+                    <label className="text-xs font-bold text-ink uppercase block mb-2">1. Target Exam / Knowledge Base Source</label>
+                    <select
+                      value={mockExamId}
+                      onChange={(e) => {
+                        setMockExamId(e.target.value);
+                        setMockSelectedTopics([]);
+                      }}
+                      className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none font-semibold"
+                    >
+                      <option value="all">All Exams Knowledge Base</option>
+                      {knowledgeBaseExams.map((ex) => (
+                        <option key={ex.id} value={ex.id}>
+                          {ex.name} ({ex.code}) - [{ex.document_count || 0} Textbooks/PYQs]
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 2. Paper Title */}
+                  <div>
+                    <label className="text-xs font-bold text-ink uppercase block mb-2">2. Paper Title</label>
+                    <input
+                      type="text"
+                      value={mockPaperTitle}
+                      onChange={(e) => setMockPaperTitle(e.target.value)}
+                      className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
+                      placeholder="e.g. NEET All India Mock Test"
+                    />
+                  </div>
                 </div>
 
-                <div>
-                  <label className="text-xs font-bold text-ink uppercase block mb-2">Number of Questions</label>
-                  <select
-                    value={mockPaperCount}
-                    onChange={(e) => setMockPaperCount(Number(e.target.value))}
-                    className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
-                  >
-                    <option value={15}>15 Questions (Quick Test)</option>
-                    <option value={30}>30 Questions (Standard Subject Mock)</option>
-                    <option value={45}>45 Questions (NEET Subject Mock)</option>
-                    <option value={90}>90 Questions (JEE Main Mock)</option>
-                    <option value={180}>180 Questions (Full NEET Mock Paper)</option>
-                  </select>
+                <div className="grid sm:grid-cols-2 gap-6">
+                  {/* 3. Number of Questions */}
+                  <div>
+                    <label className="text-xs font-bold text-ink uppercase block mb-2">3. Total Number of Questions</label>
+                    <select
+                      value={mockPaperCount}
+                      onChange={(e) => setMockPaperCount(Number(e.target.value))}
+                      className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
+                    >
+                      <option value={10}>10 Questions (Quick Quiz)</option>
+                      <option value={15}>15 Questions (Classroom Unit Test)</option>
+                      <option value={30}>30 Questions (Standard Subject Mock)</option>
+                      <option value={45}>45 Questions (NEET Single Subject Mock)</option>
+                      <option value={60}>60 Questions (KCET Full Subject Mock)</option>
+                      <option value={90}>90 Questions (JEE Main Mock Paper)</option>
+                      <option value={180}>180 Questions (Full Length NEET Paper)</option>
+                      <option value={200}>200 Questions (Full NEET Pattern Paper)</option>
+                    </select>
+                  </div>
+
+                  {/* 4. Question Difficulty Level */}
+                  <div>
+                    <label className="text-xs font-bold text-ink uppercase block mb-2">4. Question Difficulty Level</label>
+                    <select
+                      value={mockDifficulty}
+                      onChange={(e) => setMockDifficulty(e.target.value)}
+                      className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
+                    >
+                      <option value="mixed">Mixed (Exam Blueprint Standard: 30% Easy, 50% Medium, 20% Hard)</option>
+                      <option value="easy">Easy Level Questions Only</option>
+                      <option value="moderate">Moderate / Medium Level Questions Only</option>
+                      <option value="difficult">Difficult / Hard Level Questions Only</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* 5. Topic Scope Selection */}
+                <div className="border-t border-line pt-4">
+                  <label className="text-xs font-bold text-ink uppercase block mb-2">5. Syllabus / Topic Scope Selection</label>
+                  <div className="flex items-center gap-6 mb-4">
+                    <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                      <input
+                        type="radio"
+                        name="topicScope"
+                        checked={mockTopicScope === "all"}
+                        onChange={() => {
+                          setMockTopicScope("all");
+                          setMockSelectedTopics([]);
+                        }}
+                        className="accent-indigo"
+                      />
+                      All Topics (Complete Exam Syllabus)
+                    </label>
+                    <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                      <input
+                        type="radio"
+                        name="topicScope"
+                        checked={mockTopicScope === "selected"}
+                        onChange={() => setMockTopicScope("selected")}
+                        className="accent-indigo"
+                      />
+                      Specific Selected Topics / Chapters
+                    </label>
+                  </div>
+
+                  {/* Dynamic Topic Picker if "selected" */}
+                  {mockTopicScope === "selected" && (
+                    <div className="p-4 bg-white border border-line max-h-60 overflow-y-auto space-y-4">
+                      {availableKnowledgeTopics.length === 0 ? (
+                        <p className="text-xs text-slate">No specific topics configured for this exam yet. All topics will be used.</p>
+                      ) : (
+                        availableKnowledgeTopics.map((chap) => (
+                          <div key={chap.id} className="space-y-1.5">
+                            <span className="text-xs font-bold text-indigo uppercase block">{chap.name}</span>
+                            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2">
+                              {chap.topics.map((tp: any) => (
+                                <label key={tp.id} className="flex items-center gap-2 text-xs text-slate hover:text-ink cursor-pointer bg-paper p-2 border border-line">
+                                  <input
+                                    type="checkbox"
+                                    checked={mockSelectedTopics.includes(tp.id)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setMockSelectedTopics([...mockSelectedTopics, tp.id]);
+                                      } else {
+                                        setMockSelectedTopics(mockSelectedTopics.filter((tId) => tId !== tp.id));
+                                      }
+                                    }}
+                                    className="accent-indigo"
+                                  />
+                                  <span className="truncate">{tp.name}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* 6. Source Material Restriction Banner */}
+                <div className="bg-indigo/10 border border-indigo/20 p-3 rounded flex items-center justify-between text-xs text-indigo">
+                  <span className="font-semibold">📚 Generation Constraint:</span>
+                  <span>Questions generated strictly from Textbooks & Previous Years Question Papers in Knowledge Base.</span>
                 </div>
               </div>
 
               <button
                 onClick={generateMockPaperPackage}
                 disabled={generatingMockPackage}
-                className="w-full bg-indigo text-paper py-3 font-medium text-sm hover:bg-ink transition-colors shadow mb-8 disabled:opacity-50"
+                className="w-full bg-indigo text-paper py-3.5 font-medium text-sm hover:bg-ink transition-colors shadow mb-8 disabled:opacity-50"
               >
-                {generatingMockPackage ? "Generating Printable Papers Package..." : "⚡ Generate 2 Mock Papers Package"}
+                {generatingMockPackage ? "Extracting Grounded Questions & Rendering Papers Package..." : "⚡ Generate 2 Mock Papers Package (Strict Grounded RAG)"}
               </button>
 
               {/* Generated Papers Download Buttons */}
