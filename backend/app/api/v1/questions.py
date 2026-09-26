@@ -315,7 +315,8 @@ async def create_mock_test(
                 sample_questions=[],
             )
             try:
-                raw_generated = await asyncio.to_thread(generate_questions, prompt, needed)
+                llm_needed = min(needed, 15)
+                raw_generated = await asyncio.to_thread(generate_questions, prompt, llm_needed)
                 for raw in raw_generated:
                     q_id = str(uuid.uuid4())
                     diff_val = raw.difficulty.lower() if hasattr(raw, "difficulty") else (difficulty if difficulty != "mixed" else "moderate")
