@@ -139,11 +139,36 @@ async def list_exam_types(db: AsyncSession = Depends(get_db)):
 
 @router.delete("/exam-types/{exam_type_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_exam_type(exam_type_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    from app.db.models.curriculum import Subject
+    from app.db.models.document import Document, DocumentChunk
+    from app.db.models.pattern import ExamPattern
+    from app.db.models.question import QuestionBank
+    from app.db.models.attempt import ExamAttempt
+    from sqlalchemy import delete
+
     exam_type = await db.get(ExamType, exam_type_id)
     if not exam_type:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Exam type not found.")
-    await db.delete(exam_type)
-    await db.commit()
+
+    try:
+        # Delete dependent records in database order to satisfy foreign keys
+        await db.execute(delete(ExamAttempt).where(ExamAttempt.exam_type_id == exam_type_id))
+        await db.execute(delete(ExamPattern).where(ExamPattern.exam_type_id == exam_type_id))
+        await db.execute(delete(QuestionBank).where(QuestionBank.exam_type_id == exam_type_id))
+        await db.execute(delete(DocumentChunk).where(DocumentChunk.exam_type_id == exam_type_id))
+        await db.execute(delete(Document).where(Document.exam_type_id == exam_type_id))
+
+        subjs_res = await db.execute(select(Subject).where(Subject.exam_type_id == exam_type_id))
+        subjs = subjs_res.scalars().all()
+        for s in subjs:
+            await db.delete(s)
+
+        await db.delete(exam_type)
+        await db.commit()
+    except Exception as err:
+        await db.rollback()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Could not delete target exam: {str(err)}")
+
     return None
 
 

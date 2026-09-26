@@ -704,9 +704,14 @@ export default function AdminKnowledgeBasePage() {
                     className="w-full border border-line bg-white px-2.5 py-1.5 text-xs text-ink focus:outline-none font-medium"
                     required
                   >
-                    {subjects.map((sub) => (
-                      <option key={sub.id} value={sub.id}>{sub.name}</option>
-                    ))}
+                    {subjects.map((sub) => {
+                      const subExam = examTypes.find((ex) => ex.id === sub.exam_type_id);
+                      return (
+                        <option key={sub.id} value={sub.id}>
+                          {sub.name} [{subExam ? subExam.code : "EXAM"}]
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
                 <div>
@@ -930,26 +935,50 @@ export default function AdminKnowledgeBasePage() {
                       <label className="block text-xs font-bold text-ink uppercase mb-2">
                         Select Subject <span className="text-red-600 font-bold">* Mandatory</span>
                       </label>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-                        {subjects.map((sub) => {
-                          const isSelected = sub.id === selectedSubjectId;
+                      {(() => {
+                        const filteredSubjects = selectedExamIds.length > 0
+                          ? subjects.filter((sub) => selectedExamIds.includes(sub.exam_type_id))
+                          : subjects;
+
+                        if (filteredSubjects.length === 0) {
                           return (
-                            <button
-                              key={sub.id}
-                              type="button"
-                              onClick={() => {
-                                setSelectedSubjectId(sub.id);
-                                setCustomSubjectName("");
-                              }}
-                              className={`p-3 text-left border text-sm font-medium transition-all ${
-                                isSelected ? "border-indigo bg-indigo/10 text-indigo font-bold" : "border-line bg-white text-slate hover:border-ink"
-                              }`}
-                            >
-                              {sub.name}
-                            </button>
+                            <p className="text-xs text-slate italic p-3 bg-amber-50 border border-amber-200 mb-3">
+                              No pre-existing subjects for selected exam(s). Enter a custom subject name below.
+                            </p>
                           );
-                        })}
-                      </div>
+                        }
+
+                        return (
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                            {filteredSubjects.map((sub) => {
+                              const isSelected = sub.id === selectedSubjectId;
+                              const subExam = examTypes.find((ex) => ex.id === sub.exam_type_id);
+                              return (
+                                <button
+                                  key={sub.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedSubjectId(sub.id);
+                                    setCustomSubjectName("");
+                                  }}
+                                  className={`p-3 text-left border text-sm font-medium transition-all flex flex-col justify-between ${
+                                    isSelected
+                                      ? "border-indigo bg-indigo/10 text-indigo font-bold ring-1 ring-indigo shadow-sm"
+                                      : "border-line bg-white text-slate hover:border-ink"
+                                  }`}
+                                >
+                                  <span className="font-semibold">{sub.name}</span>
+                                  {subExam && (
+                                    <span className="text-[10px] font-mono font-bold uppercase text-indigo bg-indigo/10 px-1.5 py-0.5 rounded self-start mt-1">
+                                      {subExam.code}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                       <input
                         type="text"
                         value={customSubjectName}
