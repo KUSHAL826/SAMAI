@@ -62,7 +62,7 @@ function LoginForm() {
           label="Registered Student Email or Name"
           type="text"
           required
-          placeholder="e.g. student@gmail.com or Kushal YN"
+          placeholder="e.g. student@gmail.com or Student Name"
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
         />

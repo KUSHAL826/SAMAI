@@ -143,7 +143,7 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
 @router.post("/request-login-otp", response_model=MessageResponse)
 async def request_login_otp(payload: RequestLoginOTPRequest, db: AsyncSession = Depends(get_db)):
     clean_email = payload.email.lower().strip()
-    result = await db.execute(select(Student).where(Student.email == clean_email))
+    result = await db.execute(select(Student).where(func.lower(Student.email) == clean_email))
     student = result.scalar_one_or_none()
 
     if not student:
@@ -174,7 +174,7 @@ async def verify_login_otp(payload: VerifyLoginOTPRequest, db: AsyncSession = De
     if not ok:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired verification code.")
 
-    result = await db.execute(select(Student).where(Student.email == clean_email))
+    result = await db.execute(select(Student).where(func.lower(Student.email) == clean_email))
     student = result.scalar_one_or_none()
     if not student:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Student account not found.")
@@ -226,7 +226,7 @@ async def admin_login(payload: AdminLoginRequest, db: AsyncSession = Depends(get
 @router.post("/verify-signup-otp", response_model=TokenResponse)
 async def verify_signup_otp(payload: VerifySignupOTPRequest, db: AsyncSession = Depends(get_db)):
     clean_email = payload.email.lower().strip()
-    result = await db.execute(select(Student).where(Student.email == clean_email))
+    result = await db.execute(select(Student).where(func.lower(Student.email) == clean_email))
     student = result.scalar_one_or_none()
     if not student:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Student account not found.")
@@ -246,7 +246,7 @@ async def verify_signup_otp(payload: VerifySignupOTPRequest, db: AsyncSession = 
 @router.post("/forgot-password", response_model=MessageResponse)
 async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
     clean_email = payload.email.lower().strip()
-    result = await db.execute(select(Student).where(Student.email == clean_email))
+    result = await db.execute(select(Student).where(func.lower(Student.email) == clean_email))
     student = result.scalar_one_or_none()
 
     if student:
@@ -266,7 +266,7 @@ async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depen
     if not ok:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired reset code.")
 
-    result = await db.execute(select(Student).where(Student.email == clean_email))
+    result = await db.execute(select(Student).where(func.lower(Student.email) == clean_email))
     student = result.scalar_one_or_none()
     if not student:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Student not found.")
@@ -281,14 +281,20 @@ async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depen
 @router.post("/resend-otp", response_model=MessageResponse)
 async def resend_otp(payload: ResendOTPRequest, db: AsyncSession = Depends(get_db)):
     clean_email = payload.email.lower().strip()
-    result = await db.execute(select(Student).where(Student.email == clean_email))
+    result = await db.execute(select(Student).where(func.lower(Student.email) == clean_email))
     student = result.scalar_one_or_none()
     if not student:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Student account not found.")
 
-    purpose_enum = OTPPurpose.SIGNUP if payload.purpose == "signup" else OTPPurpose.RESET_PASSWORD
+    if payload.purpose == "login":
+        purpose_enum = OTPPurpose.LOGIN
+    elif payload.purpose == "reset_password":
+        purpose_enum = OTPPurpose.RESET_PASSWORD
+    else:
+        purpose_enum = OTPPurpose.SIGNUP
+
     otp = await generate_and_store_otp(clean_email, purpose_enum, db=db)
-    await send_otp_email(clean_email, otp, "verification code")
+    await send_otp_email(clean_email, otp, f"{purpose_enum.value} verification code")
 
     return MessageResponse(message="A new 6-digit code has been sent to your email.")
 

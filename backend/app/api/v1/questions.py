@@ -273,15 +273,19 @@ async def create_mock_test(
     difficulty = data.get("difficulty", "mixed")
 
     # Safe UUID Parsing with name/code lookup fallback
+    import re
+    from sqlalchemy import String, cast
+
     valid_exam_uuid = None
     if exam_type_id and str(exam_type_id) != "all":
         try:
             valid_exam_uuid = uuid.UUID(str(exam_type_id))
         except (ValueError, TypeError):
-            clean_ex_str = str(exam_type_id).strip().lower()
+            clean_ex_str = re.sub(r"^\[.*?\]\s*", "", str(exam_type_id)).strip().lower()
             ex_res = await db.execute(
                 select(ExamType).where(
                     or_(
+                        cast(ExamType.id, String) == str(exam_type_id),
                         func.lower(ExamType.code).like(f"%{clean_ex_str}%"),
                         func.lower(ExamType.name).like(f"%{clean_ex_str}%"),
                     )
@@ -299,10 +303,13 @@ async def create_mock_test(
                 try:
                     valid_topic_uuids.append(uuid.UUID(str(t)))
                 except (ValueError, TypeError):
-                    clean_t_str = str(t).strip().lower()
+                    clean_t_str = re.sub(r"^\[.*?\]\s*", "", str(t)).strip().lower()
                     t_res = await db.execute(
                         select(Topic.id).where(
-                            func.lower(Topic.name).like(f"%{clean_t_str}%")
+                            or_(
+                                cast(Topic.id, String) == str(t),
+                                func.lower(Topic.name).like(f"%{clean_t_str}%"),
+                            )
                         )
                     )
                     matching_t = t_res.scalars().all()
@@ -316,10 +323,13 @@ async def create_mock_test(
                 try:
                     valid_subj_uuids.append(uuid.UUID(str(s)))
                 except (ValueError, TypeError):
-                    clean_s_str = str(s).strip().lower()
+                    clean_s_str = re.sub(r"^\[.*?\]\s*", "", str(s)).strip().lower()
                     s_res = await db.execute(
                         select(Subject.id).where(
-                            func.lower(Subject.name).like(f"%{clean_s_str}%")
+                            or_(
+                                cast(Subject.id, String) == str(s),
+                                func.lower(Subject.name).like(f"%{clean_s_str}%"),
+                            )
                         )
                     )
                     matching_s = s_res.scalars().all()
@@ -610,6 +620,20 @@ async def create_mock_test(
             "zoology": 4,
         }
 
+        # Query target subjects from DB matching valid_subj_uuids or valid_exam_uuid or all subjects
+        subj_query = select(Subject)
+        if valid_subj_uuids:
+            subj_query = subj_query.where(Subject.id.in_(valid_subj_uuids))
+        elif valid_exam_uuid:
+            subj_query = subj_query.where(Subject.exam_type_id == valid_exam_uuid)
+
+        subj_res = await db.execute(subj_query)
+        target_subject_list = list(subj_res.scalars().all())
+
+        if not target_subject_list:
+            all_subj_res = await db.execute(select(Subject))
+            target_subject_list = list(all_subj_res.scalars().all())
+
         # Check if custom per-subject question counts provided in payload (e.g. {"Physics": 30, "Chemistry": 25})
         raw_subject_counts = data.get("subject_counts", {})
         
@@ -625,6 +649,10 @@ async def create_mock_test(
                     s_real_name = matching_subj.name if matching_subj else s_name_raw
                     for _ in range(s_cnt):
                         subject_queue.append((s_real_name, s_uuid))
+
+        if subject_queue and len(subject_queue) > count:
+            count = len(subject_queue)
+            needed_gen = count - len(questions_out)
 
         if not subject_queue:
             for i_idx in range(needed_gen):
