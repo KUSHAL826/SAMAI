@@ -449,7 +449,23 @@ export default function StudentDashboardPage() {
 
     const targetSubjIds = options.subjectIds || selectedSubjectIds;
     const targetTopicIds = options.topicIds || selectedTopicIds;
-    const qCount = options.count || questionCount;
+
+    let totalCustomSum = 0;
+    let effectiveSubjectCounts: Record<string, number> = {};
+
+    if (targetSubjIds && targetSubjIds.length > 0) {
+      subjects
+        .filter((s) => targetSubjIds.includes(s.id))
+        .forEach((s) => {
+          const cnt = subjectQuestionCounts[s.name] ?? subjectQuestionCounts[s.id] ?? 25;
+          effectiveSubjectCounts[s.name] = cnt;
+          totalCustomSum += cnt;
+        });
+    }
+
+    const qCount = (totalCustomSum > 0 && options.mode !== "topic")
+      ? totalCustomSum
+      : (options.count || questionCount);
     const duration = (options.durationMins || Math.max(10, Math.round(qCount * 1.2))) * 60;
 
     try {
@@ -465,7 +481,7 @@ export default function StudentDashboardPage() {
         mode: options.mode,
         question_count: qCount,
         difficulty: difficulty,
-        subject_counts: subjectQuestionCounts,
+        subject_counts: Object.keys(effectiveSubjectCounts).length > 0 ? effectiveSubjectCounts : subjectQuestionCounts,
         positive_marks: positiveMarks,
         negative_marks: negativeMarks,
       });
@@ -544,16 +560,32 @@ export default function StudentDashboardPage() {
     setGeneratingMockPackage(true);
     try {
       const selectedExamObj = knowledgeBaseExams.find((e) => e.id === mockExamId);
+
+      let totalCustomSum = 0;
+      let effectiveSubjectCounts: Record<string, number> = {};
+
+      if (mockSelectedSubjectIds.length > 0) {
+        subjects
+          .filter((s) => mockSelectedSubjectIds.includes(s.id))
+          .forEach((s) => {
+            const cnt = subjectQuestionCounts[s.name] ?? subjectQuestionCounts[s.id] ?? 25;
+            effectiveSubjectCounts[s.name] = cnt;
+            totalCustomSum += cnt;
+          });
+      }
+
+      const effectiveCount = totalCustomSum > 0 ? totalCustomSum : mockPaperCount;
+
       const res = await api.post<MockPaperPackage>("/api/v1/questions/download-mock-paper", {
         title: mockPaperTitle,
-        question_count: mockPaperCount,
+        question_count: effectiveCount,
         exam_type_id: mockExamId !== "all" ? mockExamId : undefined,
         subject_ids: mockSelectedSubjectIds.length > 0 ? mockSelectedSubjectIds : (mockSubjectId !== "all" ? [mockSubjectId] : []),
         exam_code: selectedExamObj ? selectedExamObj.code : activePattern.code,
         topic_ids: mockTopicScope === "selected" ? mockSelectedTopics : [],
         difficulty: mockDifficulty,
         source_material: "textbooks_and_pyqs_only",
-        subject_counts: subjectQuestionCounts,
+        subject_counts: Object.keys(effectiveSubjectCounts).length > 0 ? effectiveSubjectCounts : subjectQuestionCounts,
         positive_marks: positiveMarks,
         negative_marks: negativeMarks,
       });
