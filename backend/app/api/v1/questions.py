@@ -570,28 +570,30 @@ async def create_mock_test(
             "zoology": 4,
         }
 
-        # Fetch subject name map for subject_ids in questions_out
-        subj_id_map: dict[str, str] = {}
-        all_s_uuids = [uuid.UUID(q["subject_id"]) for q in questions_out if q.get("subject_id")]
-        if all_s_uuids:
-            s_rows = await db.execute(select(Subject).where(Subject.id.in_(all_s_uuids)))
-            for s_item in s_rows.scalars().all():
-                subj_id_map[str(s_item.id)] = s_item.name
+        # Fetch selected subject objects for strict subject filtering
+        target_subject_list = []
+        if valid_subj_uuids:
+            s_rows = await db.execute(select(Subject).where(Subject.id.in_(valid_subj_uuids)))
+            target_subject_list = s_rows.scalars().all()
+        elif valid_exam_uuid:
+            s_rows = await db.execute(select(Subject).where(Subject.exam_type_id == valid_exam_uuid))
+            target_subject_list = s_rows.scalars().all()
+
+        subj_id_map: dict[str, str] = {str(s.id): s.name for s in target_subject_list}
 
         for i in range(needed_gen):
             q_id = str(uuid.uuid4())
             tmpl = subject_templates[i % len(subject_templates)]
             q_text = tmpl["question"].format(topic=target_tname)
             
-            # Dynamically determine subject name from index or target topic
-            if i % 4 == 0:
-                s_name = "Physics"
-            elif i % 4 == 1:
-                s_name = "Chemistry"
-            elif i % 4 == 2:
-                s_name = "Mathematics"
+            # Determine subject strictly from selected target subjects
+            if target_subject_list:
+                curr_subj = target_subject_list[i % len(target_subject_list)]
+                s_name = curr_subj.name
+                s_uuid_str = str(curr_subj.id)
             else:
-                s_name = "Biology"
+                s_name = "General Syllabus"
+                s_uuid_str = str(valid_subj_uuids[0]) if valid_subj_uuids else None
 
             raw_opts = dict(tmpl["options"])
             orig_ans = tmpl["correct"]
@@ -615,11 +617,16 @@ async def create_mock_test(
                 "options": shuffled_options,
                 "difficulty": difficulty if difficulty != "mixed" else "moderate",
                 "topic_id": str(valid_topic_uuids[0]) if valid_topic_uuids else None,
-                "subject_id": str(valid_subj_uuids[0]) if valid_subj_uuids else None,
+                "subject_id": s_uuid_str,
                 "subject_name": s_name,
                 "correct_answer": new_correct_key,
                 "explanation": f"Grounded Syllabus Explanation for {target_tname}: {tmpl['explanation']}",
             })
+
+    # Filter out questions that do NOT belong to valid_subj_uuids if user explicitly specified subjects
+    if valid_subj_uuids:
+        valid_s_str_set = {str(u) for u in valid_subj_uuids}
+        questions_out = [q for q in questions_out if not q.get("subject_id") or str(q.get("subject_id")) in valid_s_str_set]
 
     # Shuffle options for existing question bank items to guarantee non-predictability
     for q in questions_out:
@@ -677,18 +684,20 @@ async def submit_test(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Evaluates test attempt with +4 / -1 NEET/KCET/JEE marking scheme,
+    Evaluates test attempt with customizable positive & negative marking scheme (+4/-1, +1/0, etc.),
     persists student attempt to DB for performance tracking, and returns analytics.
     """
     user_answers = payload.get("user_answers", {})
     questions = payload.get("questions", [])
     time_taken = payload.get("time_taken_seconds", 0)
+    pos_marks = float(payload.get("positive_marks") or 4.0)
+    neg_marks = float(payload.get("negative_marks") or 1.0)
 
     correct_count = 0
     incorrect_count = 0
     unattempted_count = 0
     score = 0.0
-    max_score = len(questions) * 4.0
+    max_score = len(questions) * pos_marks
 
     solutions = []
 
@@ -705,11 +714,11 @@ async def submit_test(
             delta = 0.0
         elif user_ans == correct_ans:
             correct_count += 1
-            delta = 4.0
+            delta = pos_marks
             is_correct = True
         else:
             incorrect_count += 1
-            delta = -1.0
+            delta = -abs(neg_marks)
 
         score += delta
 

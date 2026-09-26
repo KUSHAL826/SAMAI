@@ -227,6 +227,8 @@ export default function StudentDashboardPage() {
   const [mockSelectedTopics, setMockSelectedTopics] = useState<string[]>([]);
   const [mockDifficulty, setMockDifficulty] = useState<string>("mixed");
   const [fullLengthTopicScope, setFullLengthTopicScope] = useState<"all" | "selected">("all");
+  const [positiveMarks, setPositiveMarks] = useState<number>(4);
+  const [negativeMarks, setNegativeMarks] = useState<number>(1);
 
   const [customPatterns, setCustomPatterns] = useState<any[]>([]);
 
@@ -504,6 +506,8 @@ export default function StudentDashboardPage() {
           time_taken_seconds: elapsed,
           user_answers: sessionData.userAnswers,
           questions: sessionData.questions,
+          positive_marks: positiveMarks,
+          negative_marks: negativeMarks,
         },
         true
       );
@@ -1908,8 +1912,8 @@ export default function StudentDashboardPage() {
                     )}
                   </div>
 
-                  {/* STEP 4 CONFIGURATIONS: TITLE, COUNT & DIFFICULTY */}
-                  <div className="border-t border-line pt-4 grid sm:grid-cols-3 gap-4">
+                  {/* STEP 4 CONFIGURATIONS: TITLE, COUNT, DIFFICULTY & MARKING SCHEME */}
+                  <div className="border-t border-line pt-4 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div>
                       <label className="text-xs font-bold text-slate uppercase block mb-1">Paper Title</label>
                       <input
@@ -1937,16 +1941,29 @@ export default function StudentDashboardPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs font-bold text-slate uppercase block mb-1">Difficulty Level</label>
+                      <label className="text-xs font-bold text-slate uppercase block mb-1">Positive Marks per Question</label>
                       <select
-                        value={mockDifficulty}
-                        onChange={(e) => setMockDifficulty(e.target.value)}
+                        value={positiveMarks}
+                        onChange={(e) => setPositiveMarks(Number(e.target.value))}
                         className="w-full border border-line bg-white px-3 py-2 text-xs text-ink focus:outline-none font-medium"
                       >
-                        <option value="mixed">Mixed (Blueprint Standard)</option>
-                        <option value="easy">Easy Level</option>
-                        <option value="moderate">Moderate Level</option>
-                        <option value="difficult">Difficult Level</option>
+                        <option value={4}>+4 Marks (NEET / JEE Standard)</option>
+                        <option value={1}>+1 Mark (KCET Standard)</option>
+                        <option value={2}>+2 Marks</option>
+                        <option value={3}>+3 Marks</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate uppercase block mb-1">Negative Marking Penalty</label>
+                      <select
+                        value={negativeMarks}
+                        onChange={(e) => setNegativeMarks(Number(e.target.value))}
+                        className="w-full border border-line bg-white px-3 py-2 text-xs text-ink focus:outline-none font-medium"
+                      >
+                        <option value={1}>-1 Penalty (Standard Negative Marking)</option>
+                        <option value={0}>0 Penalty (No Negative Marking - KCET)</option>
+                        <option value={0.25}>-0.25 Penalty</option>
+                        <option value={0.5}>-0.5 Penalty</option>
                       </select>
                     </div>
                   </div>
