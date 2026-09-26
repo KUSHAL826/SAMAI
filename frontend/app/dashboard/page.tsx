@@ -253,36 +253,53 @@ export default function StudentDashboardPage() {
 
   async function loadCurriculumData() {
     try {
-      const [examsList, subjectsList, kbRes, patternsList] = await Promise.all([
-        api.get<ExamType[]>("/api/v1/admin/exam-types"),
-        api.get<Subject[]>("/api/v1/admin/subjects"),
-        api.get<{ exams: any[] }>("/api/v1/questions/knowledge-base-options").catch(() => ({ exams: [] })),
-        api.get<any[]>("/api/v1/admin/patterns").catch(() => []),
+      const [kbRes, patternsList] = await Promise.all([
+        api.get<{ exams: any[] }>("/api/v1/questions/knowledge-base-options"),
+        api.get<any[]>("/api/v1/admin/patterns", true).catch(() => []),
       ]);
-      setExams(examsList);
-      setSubjects(subjectsList);
-      setKnowledgeBaseExams(kbRes.exams || []);
+
+      const kbExams = kbRes.exams || [];
+      setKnowledgeBaseExams(kbExams);
       setCustomPatterns(patternsList || []);
 
-      if (examsList.length > 0) {
-        setSelectedExamId((prev) => prev || examsList[0].id);
-        setMockExamId((prev) => (prev === "all" ? prev : examsList[0].id));
-      }
+      const parsedExams: ExamType[] = [];
+      const parsedSubjects: Subject[] = [];
+      const topicsMap: Record<string, any[]> = {};
 
-      const topicsMap: Record<string, Chapter[]> = {};
-      await Promise.all(
-        subjectsList.map(async (subj) => {
-          try {
-            const chaptersList = await api.get<Chapter[]>(`/api/v1/admin/chapters?subject_id=${subj.id}`);
-            topicsMap[subj.id] = chaptersList;
-          } catch {
-            topicsMap[subj.id] = [];
+      kbExams.forEach((ex: any) => {
+        parsedExams.push({ id: ex.id, code: ex.code, name: ex.name });
+        (ex.subjects || []).forEach((sb: any) => {
+          parsedSubjects.push({ id: sb.id, exam_type_id: ex.id, name: sb.name });
+          const subTopicsList: any[] = [];
+          (sb.chapters || []).forEach((ch: any) => {
+            (ch.topics || []).forEach((tp: any) => {
+              subTopicsList.push({
+                id: tp.id,
+                chapter_id: ch.id,
+                name: tp.name,
+              });
+            });
+          });
+          // Fallback to chapter names if no subtopics created under chapter
+          if (subTopicsList.length === 0 && (sb.chapters || []).length > 0) {
+            (sb.chapters || []).forEach((ch: any) => {
+              subTopicsList.push({ id: ch.id, chapter_id: ch.id, name: ch.name });
+            });
           }
-        })
-      );
+          topicsMap[sb.id] = subTopicsList;
+        });
+      });
+
+      setExams(parsedExams);
+      setSubjects(parsedSubjects);
       setSubjectTopicsMap(topicsMap);
-    } catch {
-      // Backend fallback graceful data
+
+      if (parsedExams.length > 0) {
+        setSelectedExamId((prev) => prev || parsedExams[0].id);
+        setMockExamId((prev) => (prev === "all" ? prev : parsedExams[0].id));
+      }
+    } catch (err) {
+      console.error("[STUDENT CURRICULUM LOAD ERROR]", err);
     }
   }
 
@@ -1190,15 +1207,20 @@ export default function StudentDashboardPage() {
 
               <div>
                 <label className="text-[11px] font-bold text-slate uppercase block mb-1">
-                  Search / Type Custom Topic Name
+                  Select Topic from Knowledge Base Dropdown *
                 </label>
-                <input
-                  type="text"
+                <select
                   value={customTopicInput}
                   onChange={(e) => setCustomTopicInput(e.target.value)}
-                  placeholder="e.g. Organic Reactions, Kinematics..."
-                  className="w-full border border-line bg-paper px-3 py-2 text-xs text-ink focus:outline-none font-medium focus:border-indigo"
-                />
+                  className="w-full border border-indigo/40 bg-indigo/5 px-2.5 py-2 text-xs text-ink focus:outline-none font-bold"
+                >
+                  <option value="">-- Select Topic from Dropdown --</option>
+                  {availableKnowledgeTopics.flatMap((c: any) => c.topics || []).map((t: any) => (
+                    <option key={t.id} value={t.name}>
+                      🎯 {t.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <button
