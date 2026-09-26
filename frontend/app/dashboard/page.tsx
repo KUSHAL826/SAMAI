@@ -290,6 +290,14 @@ export default function StudentDashboardPage() {
         });
       });
 
+      if (parsedExams.length === 0) {
+        parsedExams.push(
+          { id: "neet-default-id", code: "NEET", name: "NEET Medical Entrance Exam" },
+          { id: "kcet-default-id", code: "KCET", name: "KCET Engineering & Pharmacy Exam" },
+          { id: "jee-default-id", code: "JEE", name: "JEE Main & Advanced Exam" }
+        );
+      }
+
       setExams(parsedExams);
       setSubjects(parsedSubjects);
       setSubjectTopicsMap(topicsMap);
@@ -300,6 +308,11 @@ export default function StudentDashboardPage() {
       }
     } catch (err) {
       console.error("[STUDENT CURRICULUM LOAD ERROR]", err);
+      setExams([
+        { id: "neet-default-id", code: "NEET", name: "NEET Medical Entrance Exam" },
+        { id: "kcet-default-id", code: "KCET", name: "KCET Engineering & Pharmacy Exam" },
+        { id: "jee-default-id", code: "JEE", name: "JEE Main & Advanced Exam" }
+      ]);
     }
   }
 
@@ -1112,22 +1125,44 @@ export default function StudentDashboardPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 pt-6 flex flex-col md:flex-row gap-6">
           {/* ORGANIZED SIDEBAR CONTAINER */}
           <aside className="w-full md:w-72 lg:w-80 shrink-0 space-y-6">
-            {/* SIDEBAR SECTION 1: EXAM SECTIONS NAVIGATION (No. of Sections = No. of Exams) */}
-            <div className="border border-line bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between border-b border-line pb-3 mb-4">
+            {/* SIDEBAR SECTION 1: EXAM SECTIONS NAVIGATION */}
+            <div className="border border-line bg-white p-5 shadow-sm space-y-3">
+              <div className="flex items-center justify-between border-b border-line pb-3">
                 <h2 className="font-serif text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
-                  <span className="text-indigo text-lg">📚</span> Target Exams ({exams.length})
+                  <span className="text-indigo text-lg">📚</span> Target Exam Selector
                 </h2>
                 <span className="text-[10px] font-mono bg-indigo/10 text-indigo px-2 py-0.5 rounded font-bold">
                   {exams.length} Exams
                 </span>
               </div>
 
-              <p className="text-xs text-slate mb-4">
-                Select an exam section to adapt training pattern and topic list:
-              </p>
+              <div>
+                <label className="text-[11px] font-bold text-slate uppercase block mb-1">
+                  Select Target Exam Dropdown Menu *
+                </label>
+                <select
+                  value={selectedExamId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setSelectedExamId(id);
+                    setMockExamId(id);
+                    setSelectedTopicIds([]);
+                    setSelectedSubjectIds([]);
+                    if (activeTab === "analytics") {
+                      fetchAnalyticsData(id);
+                    }
+                  }}
+                  className="w-full border border-indigo/50 bg-indigo/5 px-3 py-2 text-xs font-bold text-ink focus:outline-none"
+                >
+                  {exams.map((ex) => (
+                    <option key={ex.id} value={ex.id}>
+                      {ex.code} — {ex.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-              <div className="space-y-2.5">
+              <div className="space-y-2 pt-1">
                 {exams.map((ex) => {
                   const isSelected = selectedExamId === ex.id;
                   const pattern = getExamPattern(ex.code, ex.name);
@@ -1143,21 +1178,21 @@ export default function StudentDashboardPage() {
                         setSelectedTopicIds([]);
                         setSelectedSubjectIds([]);
                       }}
-                      className={`w-full text-left p-3.5 border transition-all flex flex-col gap-2 ${
+                      className={`w-full text-left p-3 border transition-all flex flex-col gap-1.5 ${
                         isSelected
                           ? "border-indigo bg-indigo/5 text-ink shadow-sm ring-1 ring-indigo"
                           : "border-line bg-paper hover:border-slate text-slate hover:text-ink"
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-serif font-bold text-sm text-ink flex items-center gap-2">
-                          <span className="text-base">
+                        <span className="font-serif font-bold text-xs text-ink flex items-center gap-1.5">
+                          <span>
                             {ex.code.includes("NEET") ? "🩺" : ex.code.includes("KCET") ? "⚡" : "🎓"}
                           </span>
                           {ex.name}
                         </span>
                         <span
-                          className={`text-[10px] font-mono font-bold px-2 py-0.5 ${
+                          className={`text-[9px] font-mono font-bold px-1.5 py-0.5 ${
                             isSelected ? "bg-indigo text-paper" : "bg-line text-slate"
                           }`}
                         >

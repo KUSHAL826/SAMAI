@@ -148,8 +148,11 @@ async def get_knowledge_base_options(db: AsyncSession = Depends(get_db)):
     Returns exams, subjects, chapters, topics, and document metadata
     uploaded by admins in the knowledge base.
     """
+    from app.api.v1.admin.curriculum import ensure_default_curriculum
     from app.db.models.curriculum import ExamType, Subject, Chapter, Topic
     from app.db.models.document import Document
+
+    await ensure_default_curriculum(db)
 
     exam_res = await db.execute(select(ExamType).order_by(ExamType.name))
     exams = exam_res.scalars().all()
