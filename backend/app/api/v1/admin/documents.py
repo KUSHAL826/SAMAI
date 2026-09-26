@@ -106,21 +106,24 @@ async def upload_document(
                 await db.refresh(new_s)
                 resolved_subject_id = new_s.id
 
-        # Auto-provision Chapter if name passed
-        if resolved_subject_id and not resolved_chapter_id and chapter_name and chapter_name.strip():
-            clean_cname = chapter_name.strip()
-            chap_res = await db.execute(
-                select(Chapter).where(Chapter.subject_id == resolved_subject_id, func.lower(Chapter.name) == clean_cname.lower())
-            )
-            existing_c = chap_res.scalar_one_or_none()
-            if existing_c:
-                resolved_chapter_id = existing_c.id
-            else:
-                new_c = Chapter(subject_id=resolved_subject_id, name=clean_cname)
-                db.add(new_c)
-                await db.commit()
-                await db.refresh(new_c)
-                resolved_chapter_id = new_c.id
+        # Auto-provision Chapter if name passed or if topic_name passed without chapter
+        if resolved_subject_id and not resolved_chapter_id:
+            raw_cname = chapter_name.strip() if chapter_name and chapter_name.strip() else None
+            raw_tname = topic_name.strip() if topic_name and topic_name.strip() else None
+            if raw_cname or raw_tname:
+                clean_cname = raw_cname or (f"{raw_tname} Chapter Module" if raw_tname else "General Syllabus Module")
+                chap_res = await db.execute(
+                    select(Chapter).where(Chapter.subject_id == resolved_subject_id, func.lower(Chapter.name) == clean_cname.lower())
+                )
+                existing_c = chap_res.scalar_one_or_none()
+                if existing_c:
+                    resolved_chapter_id = existing_c.id
+                else:
+                    new_c = Chapter(subject_id=resolved_subject_id, name=clean_cname)
+                    db.add(new_c)
+                    await db.commit()
+                    await db.refresh(new_c)
+                    resolved_chapter_id = new_c.id
 
         # Auto-provision Topic if name passed
         if resolved_chapter_id and not resolved_topic_id and topic_name and topic_name.strip():

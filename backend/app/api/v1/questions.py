@@ -225,10 +225,19 @@ async def create_mock_test(
     exam_type_id = data.get("exam_type_id")
     subject_ids = data.get("subject_ids", [])
     topic_ids = data.get("topic_ids", [])
+    topic_name = data.get("topic_name")
     difficulty = data.get("difficulty", "mixed")
 
     if data.get("topic_id"):
         topic_ids.append(data["topic_id"])
+
+    # If topic_name passed without IDs, search Topic table
+    if topic_name and not topic_ids:
+        from sqlalchemy import func
+        t_res = await db.execute(select(Topic).where(func.lower(Topic.name).like(f"%{topic_name.strip().lower()}%")))
+        matching_topics = t_res.scalars().all()
+        if matching_topics:
+            topic_ids.extend([str(t.id) for t in matching_topics])
 
     questions_out = []
 
@@ -300,7 +309,7 @@ async def create_mock_test(
                 exam="Competitive Examination",
                 subject="Core Syllabus",
                 chapter="Selected Chapters",
-                topic="Syllabus Topics",
+                topic=topic_name or "Syllabus Topics",
                 difficulty=difficulty if difficulty != "mixed" else "moderate",
                 retrieved_chunks=chunks_text,
                 sample_questions=[],

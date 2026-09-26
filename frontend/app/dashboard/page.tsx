@@ -179,6 +179,9 @@ export default function StudentDashboardPage() {
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
   const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>([]);
 
+  // Instant Custom Topic Name Input
+  const [customTopicInput, setCustomTopicInput] = useState<string>("");
+
   // Test Generator Config
   const [questionCount, setQuestionCount] = useState<number>(10);
   const [difficulty, setDifficulty] = useState<string>("mixed");
@@ -354,6 +357,7 @@ export default function StudentDashboardPage() {
     mode: "topic" | "multi_topic" | "subject" | "full_length" | "custom";
     subjectIds?: string[];
     topicIds?: string[];
+    topicName?: string;
     count?: number;
     durationMins?: number;
   }) {
@@ -375,13 +379,14 @@ export default function StudentDashboardPage() {
         exam_type_id: selectedExamId || undefined,
         subject_ids: targetSubjIds,
         topic_ids: targetTopicIds,
+        topic_name: options.topicName,
         mode: options.mode,
         question_count: qCount,
         difficulty: difficulty,
       });
 
       if (!res.questions || res.questions.length === 0) {
-        setError("No questions could be fetched for the selected configuration.");
+        setError("No questions could be fetched for the selected topic/configuration.");
         setLoadingTest(false);
         return;
       }
@@ -1016,26 +1021,25 @@ export default function StudentDashboardPage() {
           </div>
         </div>
       ) : (
-        /* DASHBOARD WITH LEFT EXAM SIDEBAR */
+        /* DASHBOARD WITH ORGANIZED LEFT SIDEBARS */
         <div className="mx-auto max-w-7xl px-4 sm:px-6 pt-6 flex flex-col md:flex-row gap-6">
-          {/* SIDEBAR: EXAM SECTIONS (No. of Sections = No. of Exams) */}
+          {/* ORGANIZED SIDEBAR CONTAINER */}
           <aside className="w-full md:w-72 lg:w-80 shrink-0 space-y-6">
-            {/* Exam Navigation Box */}
+            {/* SIDEBAR SECTION 1: EXAM NAVIGATION (1 Section per Exam) */}
             <div className="border border-line bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between border-b border-line pb-3 mb-4">
                 <h2 className="font-serif text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
-                  <span className="text-indigo text-lg">📚</span> Exam Sections ({exams.length})
+                  <span className="text-indigo text-lg">📚</span> Target Exams ({exams.length})
                 </h2>
                 <span className="text-[10px] font-mono bg-indigo/10 text-indigo px-2 py-0.5 rounded font-bold">
-                  {exams.length} Exams Active
+                  {exams.length} Exams
                 </span>
               </div>
 
               <p className="text-xs text-slate mb-4">
-                Select an exam section to adapt your practice hub, syllabus pattern, and question difficulty level:
+                Select an exam section to adapt your practice hub & topic list:
               </p>
 
-              {/* Exam Sidebar Buttons (1 section per exam) */}
               <div className="space-y-2.5">
                 {exams.map((ex) => {
                   const isSelected = selectedExamId === ex.id;
@@ -1084,7 +1088,43 @@ export default function StudentDashboardPage() {
               </div>
             </div>
 
-            {/* Active Exam Training Blueprint & Difficulty Config */}
+            {/* SIDEBAR SECTION 2: TOPIC-WISE EXAM GENERATOR */}
+            <div className="border border-line bg-white p-5 shadow-sm space-y-3">
+              <div className="flex items-center justify-between border-b border-line pb-2">
+                <h3 className="font-serif text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
+                  <span className="text-indigo">🎯</span> Topic-Wise Exam
+                </h3>
+                <span className="text-[10px] font-mono bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
+                  INSTANT
+                </span>
+              </div>
+              <p className="text-xs text-slate">
+                Enter any topic name to take a dedicated topic-wise exam grounded in uploaded textbooks:
+              </p>
+              <input
+                type="text"
+                value={customTopicInput}
+                onChange={(e) => setCustomTopicInput(e.target.value)}
+                placeholder="e.g. Organic Reactions, Thermodynamics, Kinematics..."
+                className="w-full border border-line bg-paper px-3 py-2 text-xs text-ink focus:outline-none font-medium focus:border-indigo"
+              />
+              <button
+                disabled={!customTopicInput.trim() || loadingTest}
+                onClick={() => {
+                  startTest({
+                    title: `Topic Test: ${customTopicInput.trim()}`,
+                    mode: "topic",
+                    topicName: customTopicInput.trim(),
+                    count: 10,
+                  });
+                }}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-paper text-xs font-bold py-2.5 transition-colors disabled:opacity-40 shadow-sm"
+              >
+                {loadingTest ? "Generating Exam..." : "⚡ Take Topic-Wise Exam (10 Qs)"}
+              </button>
+            </div>
+
+            {/* SIDEBAR SECTION 3: EXAM PATTERN & DIFFICULTY CONFIG */}
             {activeExamObj && (
               <div className="border border-line bg-white p-5 shadow-sm space-y-4">
                 <h3 className="font-serif text-sm font-bold text-ink border-b border-line pb-2 flex items-center gap-2">

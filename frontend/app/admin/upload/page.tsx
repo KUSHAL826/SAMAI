@@ -314,10 +314,8 @@ export default function AdminKnowledgeBasePage() {
         formData.append("subject_name", customSubjectName.trim());
       }
 
-      if (materialScope === "single_content") {
-        if (contentChapterName.trim()) formData.append("chapter_name", contentChapterName.trim());
-        if (contentTopicName.trim()) formData.append("topic_name", contentTopicName.trim());
-      }
+      if (contentChapterName.trim()) formData.append("chapter_name", contentChapterName.trim());
+      if (contentTopicName.trim()) formData.append("topic_name", contentTopicName.trim());
 
       const res = await api.post<{
         document: { id: string };
@@ -925,31 +923,36 @@ export default function AdminKnowledgeBasePage() {
                       />
                     </div>
 
-                    {/* Chapter & Topic inputs if single_content */}
-                    {materialScope === "single_content" && (
-                      <div className="grid sm:grid-cols-2 gap-4 pt-3 border-t border-line">
-                        <div>
-                          <label className="block text-xs font-bold text-ink uppercase mb-1">Chapter Name</label>
-                          <input
-                            type="text"
-                            value={contentChapterName}
-                            onChange={(e) => setContentChapterName(e.target.value)}
-                            placeholder="e.g. Kinematics & Mechanics"
-                            className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-ink uppercase mb-1">Topic Name / Unit</label>
-                          <input
-                            type="text"
-                            value={contentTopicName}
-                            onChange={(e) => setContentTopicName(e.target.value)}
-                            placeholder="e.g. Motion in One Dimension"
-                            className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
-                          />
-                        </div>
+                    {/* Dedicated Topic Name Input Box for Topic-Wise Exams */}
+                    <div className="grid sm:grid-cols-2 gap-4 pt-3 border-t border-line">
+                      <div>
+                        <label className="block text-xs font-bold text-ink uppercase mb-1">
+                          Topic Name (For Topic-Wise Exam Generation)
+                        </label>
+                        <input
+                          type="text"
+                          value={contentTopicName}
+                          onChange={(e) => setContentTopicName(e.target.value)}
+                          placeholder="e.g. Organic Reactions, Thermodynamics, Kinematics..."
+                          className="w-full border border-indigo/40 bg-indigo/5 px-3 py-2 text-sm text-ink focus:outline-none font-medium"
+                        />
+                        <span className="text-[10px] text-slate mt-0.5 block">
+                          ⚡ Entering a topic name auto-provisions this topic in curriculum for student topic-wise exams.
+                        </span>
                       </div>
-                    )}
+                      <div>
+                        <label className="block text-xs font-bold text-ink uppercase mb-1">
+                          Chapter / Module Name (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={contentChapterName}
+                          onChange={(e) => setContentChapterName(e.target.value)}
+                          placeholder="e.g. Unit 1: Physics Fundamentals"
+                          className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
               </section>
