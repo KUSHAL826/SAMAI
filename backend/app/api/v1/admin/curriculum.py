@@ -50,7 +50,9 @@ async def create_exam_type(payload: ExamTypeCreate, db: AsyncSession = Depends(g
 
 
 async def ensure_default_curriculum(db: AsyncSession):
-    """Auto-seeds default ExamTypes, Subjects, Chapters, and Topics if database is empty."""
+    """Auto-seeds default ExamTypes, ExamPatterns, Subjects, Chapters, and Topics if database is empty."""
+    from app.db.models.pattern import ExamPattern
+
     res = await db.execute(select(ExamType))
     exams = res.scalars().all()
     if not exams:
@@ -63,6 +65,43 @@ async def ensure_default_curriculum(db: AsyncSession):
         await db.refresh(kcet)
         await db.refresh(jee)
         exams = [neet, kcet, jee]
+
+        # Seed Admin ExamPatterns in DB
+        p_neet = ExamPattern(
+            exam_type_id=neet.id,
+            name="NEET UG Official Pattern (180 Qs / 720 Marks)",
+            duration_minutes=180,
+            total_questions=180,
+            total_marks=720,
+            positive_marks=4.0,
+            negative_marks=-1.0,
+            questions_per_subject={"Physics": 45, "Chemistry": 45, "Biology": 90},
+            is_active=True,
+        )
+        p_kcet = ExamPattern(
+            exam_type_id=kcet.id,
+            name="KCET Official Pattern (180 Qs / 180 Marks)",
+            duration_minutes=180,
+            total_questions=180,
+            total_marks=180,
+            positive_marks=1.0,
+            negative_marks=0.0,
+            questions_per_subject={"Physics": 60, "Chemistry": 60, "Mathematics": 60},
+            is_active=True,
+        )
+        p_jee = ExamPattern(
+            exam_type_id=jee.id,
+            name="JEE Main Official Pattern (90 Qs / 360 Marks)",
+            duration_minutes=180,
+            total_questions=90,
+            total_marks=360,
+            positive_marks=4.0,
+            negative_marks=-1.0,
+            questions_per_subject={"Physics": 30, "Chemistry": 30, "Mathematics": 30},
+            is_active=True,
+        )
+        db.add_all([p_neet, p_kcet, p_jee])
+        await db.commit()
 
     for ex in exams:
         subjs_res = await db.execute(select(Subject).where(Subject.exam_type_id == ex.id))

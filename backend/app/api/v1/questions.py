@@ -202,7 +202,47 @@ async def get_knowledge_base_options(db: AsyncSession = Depends(get_db)):
             "subjects": out_subjects,
         })
 
-    return {"exams": out_exams}
+    from app.db.models.pattern import ExamPattern
+    pattern_res = await db.execute(select(ExamPattern).where(ExamPattern.is_active.is_(True)))
+    patterns = pattern_res.scalars().all()
+    out_patterns = [
+        {
+            "id": str(pt.id),
+            "exam_type_id": str(pt.exam_type_id),
+            "name": pt.name,
+            "duration_minutes": pt.duration_minutes,
+            "total_questions": pt.total_questions,
+            "total_marks": pt.total_marks,
+            "positive_marks": pt.positive_marks,
+            "negative_marks": abs(pt.negative_marks),
+            "questions_per_subject": pt.questions_per_subject or {},
+        }
+        for pt in patterns
+    ]
+
+    return {"exams": out_exams, "patterns": out_patterns}
+
+
+@router.get("/patterns")
+async def get_student_patterns(db: AsyncSession = Depends(get_db)):
+    """Pulls all active admin-configured exam patterns from database."""
+    from app.db.models.pattern import ExamPattern
+    pattern_res = await db.execute(select(ExamPattern).where(ExamPattern.is_active.is_(True)).order_by(ExamPattern.name))
+    patterns = pattern_res.scalars().all()
+    return [
+        {
+            "id": str(pt.id),
+            "exam_type_id": str(pt.exam_type_id),
+            "name": pt.name,
+            "duration_minutes": pt.duration_minutes,
+            "total_questions": pt.total_questions,
+            "total_marks": pt.total_marks,
+            "positive_marks": pt.positive_marks,
+            "negative_marks": abs(pt.negative_marks),
+            "questions_per_subject": pt.questions_per_subject or {},
+        }
+        for pt in patterns
+    ]
 
 
 @router.post("/mock-test")
@@ -570,30 +610,34 @@ async def create_mock_test(
             "zoology": 4,
         }
 
-        # Fetch selected subject objects for strict subject filtering
-        target_subject_list = []
-        if valid_subj_uuids:
-            s_rows = await db.execute(select(Subject).where(Subject.id.in_(valid_subj_uuids)))
-            target_subject_list = s_rows.scalars().all()
-        elif valid_exam_uuid:
-            s_rows = await db.execute(select(Subject).where(Subject.exam_type_id == valid_exam_uuid))
-            target_subject_list = s_rows.scalars().all()
+        # Check if custom per-subject question counts provided in payload (e.g. {"Physics": 30, "Chemistry": 25})
+        raw_subject_counts = data.get("subject_counts", {})
+        
+        # Build subject assignment queue matching target counts per subject
+        subject_queue: list[tuple[str, str | None]] = []
+        
+        if raw_subject_counts and isinstance(raw_subject_counts, dict):
+            for s_name_raw, count_val in raw_subject_counts.items():
+                s_cnt = int(count_val) if count_val else 0
+                if s_cnt > 0:
+                    matching_subj = next((s for s in target_subject_list if s.name.lower() == s_name_raw.lower()), None)
+                    s_uuid = str(matching_subj.id) if matching_subj else None
+                    s_real_name = matching_subj.name if matching_subj else s_name_raw
+                    for _ in range(s_cnt):
+                        subject_queue.append((s_real_name, s_uuid))
 
-        subj_id_map: dict[str, str] = {str(s.id): s.name for s in target_subject_list}
+        if not subject_queue:
+            for i_idx in range(needed_gen):
+                if target_subject_list:
+                    curr_s = target_subject_list[i_idx % len(target_subject_list)]
+                    subject_queue.append((curr_s.name, str(curr_s.id)))
+                else:
+                    subject_queue.append(("General Syllabus", str(valid_subj_uuids[0]) if valid_subj_uuids else None))
 
-        for i in range(needed_gen):
+        for i, (s_name, s_uuid_str) in enumerate(subject_queue[:needed_gen]):
             q_id = str(uuid.uuid4())
             tmpl = subject_templates[i % len(subject_templates)]
             q_text = tmpl["question"].format(topic=target_tname)
-            
-            # Determine subject strictly from selected target subjects
-            if target_subject_list:
-                curr_subj = target_subject_list[i % len(target_subject_list)]
-                s_name = curr_subj.name
-                s_uuid_str = str(curr_subj.id)
-            else:
-                s_name = "General Syllabus"
-                s_uuid_str = str(valid_subj_uuids[0]) if valid_subj_uuids else None
 
             raw_opts = dict(tmpl["options"])
             orig_ans = tmpl["correct"]

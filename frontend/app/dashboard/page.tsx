@@ -96,64 +96,37 @@ type MockPaperPackage = {
   };
 };
 
-const EXAM_PATTERNS: Record<
-  string,
-  {
-    name: string;
-    code: string;
-    totalQuestions: number;
-    durationMins: number;
-    markingScheme: string;
-    positiveMarks: number;
-    negativeMarks: number;
-    description: string;
-    subjectsHint: string;
-  }
-> = {
-  NEET: {
-    name: "NEET UG Medical Entrance",
-    code: "NEET",
-    totalQuestions: 180,
-    durationMins: 180,
-    markingScheme: "+4 Correct, -1 Negative Marking",
-    positiveMarks: 4,
-    negativeMarks: 1,
-    description:
-      "National Eligibility cum Entrance Test (Medical). Grounded in NCERT Physics, Chemistry, Biology & PYQs.",
-    subjectsHint: "Physics, Chemistry, Biology (Botany & Zoology)",
-  },
-  KCET: {
-    name: "KCET Engineering & Pharmacy",
-    code: "KCET",
-    totalQuestions: 60,
-    durationMins: 80,
-    markingScheme: "+1 Correct, NO Negative Marking (0 Penalty)",
-    positiveMarks: 1,
-    negativeMarks: 0,
-    description:
-      "Karnataka Common Entrance Test. Speed & accuracy focused across State Syllabus Textbooks.",
-    subjectsHint: "Physics, Chemistry, Mathematics, Biology",
-  },
-  JEE: {
-    name: "JEE Main Engineering Entrance",
-    code: "JEE",
-    totalQuestions: 90,
-    durationMins: 180,
-    markingScheme: "+4 Correct, -1 Negative Marking",
-    positiveMarks: 4,
-    negativeMarks: 1,
-    description:
-      "Joint Entrance Examination for IITs & NITs. High difficulty analytical problems grounded in reference textbooks.",
-    subjectsHint: "Physics, Chemistry, Mathematics",
-  },
-};
 
-function getExamPattern(examCode?: string, examName?: string) {
+
+function getExamPattern(examCode?: string, examName?: string, customPatternsList: any[] = []) {
   const code = (examCode || "").toUpperCase();
   const name = (examName || "").toUpperCase();
-  if (code.includes("NEET") || name.includes("NEET")) return EXAM_PATTERNS.NEET;
-  if (code.includes("KCET") || name.includes("KCET")) return EXAM_PATTERNS.KCET;
-  if (code.includes("JEE") || name.includes("JEE")) return EXAM_PATTERNS.JEE;
+
+  const matched = customPatternsList.find((p) => {
+    const pName = (p.name || "").toUpperCase();
+    return pName.includes(code) || (code && pName.includes(code));
+  });
+
+  if (matched) {
+    const qPerSubj = matched.questions_per_subject || {};
+    const subjHint = Object.keys(qPerSubj).length > 0
+      ? Object.entries(qPerSubj).map(([s, c]) => `${s}: ${c} Qs`).join(", ")
+      : "Core Syllabus Subjects";
+
+    return {
+      name: matched.name || examName || "Entrance Exam",
+      code: examCode || "EXAM",
+      totalQuestions: matched.total_questions || 45,
+      durationMins: matched.duration_minutes || 60,
+      markingScheme: `${matched.positive_marks >= 0 ? "+" : ""}${matched.positive_marks} Correct, -${matched.negative_marks} Negative Marking`,
+      positiveMarks: matched.positive_marks ?? 4,
+      negativeMarks: matched.negative_marks ?? 1,
+      description: "Admin configured examination pattern from Knowledge Base.",
+      subjectsHint: subjHint,
+      questions_per_subject: qPerSubj,
+    };
+  }
+
   return {
     name: examName || "Competitive Exam",
     code: examCode || "EXAM",
@@ -162,8 +135,9 @@ function getExamPattern(examCode?: string, examName?: string) {
     markingScheme: "+4 Correct, -1 Negative Marking",
     positiveMarks: 4,
     negativeMarks: 1,
-    description: "Standard Competitive Entrance Examination pattern grounded in textbook content.",
+    description: "Standard Competitive Entrance Examination pattern.",
     subjectsHint: "Core Exam Syllabus Subjects",
+    questions_per_subject: {},
   };
 }
 
@@ -190,6 +164,10 @@ export default function StudentDashboardPage() {
   const [topicQuestionPoolSize, setTopicQuestionPoolSize] = useState<number>(10);
   const [questionCount, setQuestionCount] = useState<number>(45);
   const [difficulty, setDifficulty] = useState<string>("mixed");
+
+  // Dynamic Pattern & Per-Subject Question Count State
+  const [subjectQuestionCounts, setSubjectQuestionCounts] = useState<Record<string, number>>({});
+  const [selectedPatternId, setSelectedPatternId] = useState<string>("");
 
   // CBT Test Engine State
   const [testSession, setTestSession] = useState<{
@@ -263,13 +241,17 @@ export default function StudentDashboardPage() {
   async function loadCurriculumData() {
     try {
       const [kbRes, patternsList] = await Promise.all([
-        api.get<{ exams: any[] }>("/api/v1/questions/knowledge-base-options"),
-        api.get<any[]>("/api/v1/admin/patterns", true).catch(() => []),
+        api.get<{ exams: any[]; patterns?: any[] }>("/api/v1/questions/knowledge-base-options"),
+        api.get<any[]>("/api/v1/questions/patterns").catch(() => []),
       ]);
 
       const kbExams = kbRes.exams || [];
+      const loadedPatterns = (kbRes.patterns && kbRes.patterns.length > 0)
+        ? kbRes.patterns
+        : (patternsList || []);
+
       setKnowledgeBaseExams(kbExams);
-      setCustomPatterns(patternsList || []);
+      setCustomPatterns(loadedPatterns);
 
       const parsedExams: ExamType[] = [];
       const parsedSubjects: Subject[] = [];
@@ -325,24 +307,56 @@ export default function StudentDashboardPage() {
     }
   }
 
+  function applyAdminPattern(pattern: any) {
+    if (!pattern) return;
+    setSelectedPatternId(pattern.id);
+    setPositiveMarks(pattern.positive_marks ?? 4);
+    setNegativeMarks(pattern.negative_marks ?? 1);
+    setMockPaperCount(pattern.total_questions || 45);
+    setQuestionCount(pattern.total_questions || 45);
+
+    const qPerSubj = pattern.questions_per_subject || {};
+    if (Object.keys(qPerSubj).length > 0) {
+      setSubjectQuestionCounts(qPerSubj);
+
+      const matchedIds: string[] = [];
+      subjects.forEach((s) => {
+        const matchingKey = Object.keys(qPerSubj).find((k) => k.toLowerCase() === s.name.toLowerCase());
+        if (matchingKey) {
+          matchedIds.push(s.id);
+        }
+      });
+      if (matchedIds.length > 0) {
+        setSelectedSubjectIds(matchedIds);
+        setMockSelectedSubjectIds(matchedIds);
+      }
+    }
+  }
+
   const activeExamObj = exams.find((e) => e.id === selectedExamId) || exams[0];
-  const activeCustomPattern = customPatterns.find((p) => p.exam_type_id === selectedExamId);
+  const activeCustomPattern = customPatterns.find((p) => p.id === selectedPatternId || p.exam_type_id === selectedExamId);
 
   const activePattern = (() => {
     if (activeCustomPattern) {
+      const qPerSubj = activeCustomPattern.questions_per_subject || {};
+      const subjHint = Object.keys(qPerSubj).length > 0
+        ? Object.entries(qPerSubj).map(([s, c]) => `${s}: ${c} Qs`).join(", ")
+        : "Core Syllabus Subjects";
+
       return {
         name: activeCustomPattern.name || activeExamObj?.name || "Entrance Exam",
         code: activeExamObj?.code || "EXAM",
         totalQuestions: activeCustomPattern.total_questions || 45,
         durationMins: activeCustomPattern.duration_minutes || 60,
-        markingScheme: `${activeCustomPattern.positive_marks >= 0 ? "+" : ""}${activeCustomPattern.positive_marks} Correct, ${activeCustomPattern.negative_marks} Negative Marking`,
+        markingScheme: `${activeCustomPattern.positive_marks >= 0 ? "+" : ""}${activeCustomPattern.positive_marks} Correct, -${activeCustomPattern.negative_marks} Negative Marking`,
         positiveMarks: activeCustomPattern.positive_marks,
         negativeMarks: activeCustomPattern.negative_marks,
-        description: "Custom Entrance Examination pattern configured in Knowledge Base.",
-        subjectsHint: Object.keys(activeCustomPattern.questions_per_subject || {}).join(", ") || "Core Syllabus Subjects",
+        description: "Admin configured examination pattern from Knowledge Base.",
+        subjectsHint: subjHint,
+        questions_per_subject: qPerSubj,
       };
     }
-    return getExamPattern(activeExamObj?.code, activeExamObj?.name);
+    return getExamPattern(activeExamObj?.code, activeExamObj?.name, customPatterns);
   })();
 
   // Filter subjects by selected exam section in sidebar
@@ -451,6 +465,9 @@ export default function StudentDashboardPage() {
         mode: options.mode,
         question_count: qCount,
         difficulty: difficulty,
+        subject_counts: subjectQuestionCounts,
+        positive_marks: positiveMarks,
+        negative_marks: negativeMarks,
       });
 
       if (!res.questions || res.questions.length === 0) {
@@ -536,6 +553,9 @@ export default function StudentDashboardPage() {
         topic_ids: mockTopicScope === "selected" ? mockSelectedTopics : [],
         difficulty: mockDifficulty,
         source_material: "textbooks_and_pyqs_only",
+        subject_counts: subjectQuestionCounts,
+        positive_marks: positiveMarks,
+        negative_marks: negativeMarks,
       });
       setMockPackage(res);
     } catch (err) {
@@ -1594,6 +1614,58 @@ export default function StudentDashboardPage() {
                   </div>
                 </div>
 
+                {/* ADMIN PATTERN SELECTOR CARDS */}
+                {customPatterns.length > 0 && (
+                  <div className="border border-indigo/30 bg-indigo/5 p-5 shadow-sm space-y-3">
+                    <div className="flex items-center justify-between border-b border-indigo/20 pb-2">
+                      <h3 className="font-serif text-sm font-bold text-indigo uppercase tracking-wider flex items-center gap-2">
+                        <span>⚙️</span> Available Patterns Applied by Admin
+                      </h3>
+                      <span className="text-[10px] font-mono bg-indigo text-paper px-2 py-0.5 rounded font-bold">
+                        {customPatterns.length} Active Patterns
+                      </span>
+                    </div>
+
+                    <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
+                      {customPatterns.map((pat) => {
+                        const isSelected = selectedPatternId === pat.id;
+                        const qSubj = pat.questions_per_subject || {};
+                        return (
+                          <button
+                            key={pat.id}
+                            type="button"
+                            onClick={() => applyAdminPattern(pat)}
+                            className={`p-3 border text-left transition-all flex flex-col justify-between ${
+                              isSelected
+                                ? "border-indigo bg-indigo text-paper shadow ring-2 ring-indigo"
+                                : "border-indigo/20 bg-white hover:border-indigo text-ink"
+                            }`}
+                          >
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <strong className={`font-serif text-xs font-bold ${isSelected ? "text-paper" : "text-ink"}`}>
+                                  {pat.name}
+                                </strong>
+                                <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${isSelected ? "bg-amber text-ink" : "bg-indigo/10 text-indigo"}`}>
+                                  {pat.total_questions} Qs
+                                </span>
+                              </div>
+                              <p className={`text-[11px] mt-1 ${isSelected ? "text-paper/80" : "text-slate"}`}>
+                                Duration: {pat.duration_minutes} Mins | Score: +{pat.positive_marks} / -{pat.negative_marks}
+                              </p>
+                            </div>
+                            {Object.keys(qSubj).length > 0 && (
+                              <div className={`text-[10px] border-t pt-1.5 mt-2 font-mono ${isSelected ? "border-paper/20 text-amber" : "border-line text-indigo font-semibold"}`}>
+                                {Object.entries(qSubj).map(([s, c]) => `${s}: ${c} Qs`).join(" • ")}
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* FULL-LENGTH LAUNCH ACTION CARDS */}
                 <div className="grid sm:grid-cols-2 gap-6">
                   <div className="border border-line bg-paper p-6 shadow-sm flex flex-col justify-between hover:border-indigo transition-colors">
@@ -1694,12 +1766,17 @@ export default function StudentDashboardPage() {
                   </div>
                 </div>
 
-                {/* MULTI-TOPIC SELECTION CHECKBOX GRID */}
+                {/* MULTI-TOPIC SELECTION CHECKBOX GRID WITH PER-SUBJECT QUESTION COUNTS */}
                 <div className="space-y-6 pt-4 border-t border-line">
                   <div className="flex items-center justify-between border-b border-line pb-3">
-                    <h3 className="font-serif text-xl font-bold text-ink">
-                      Select Topics / Chapters for Multi-Topic Mock Test
-                    </h3>
+                    <div>
+                      <h3 className="font-serif text-xl font-bold text-ink">
+                        Select Topics / Chapters & Questions Count Per Subject
+                      </h3>
+                      <p className="text-xs text-slate mt-0.5">
+                        Set distinct question counts for each selected subject (e.g. Physics: 30 Qs, Chemistry: 25 Qs).
+                      </p>
+                    </div>
                     <span className="text-xs font-bold text-indigo bg-indigo/10 px-2.5 py-1 rounded">
                       {selectedTopicIds.length} Topic{selectedTopicIds.length === 1 ? "" : "s"} Selected
                     </span>
@@ -1710,9 +1787,31 @@ export default function StudentDashboardPage() {
                     const isSubjectSelected = selectedSubjectIds.includes(subj.id);
 
                     return (
-                      <div key={subj.id} className="border border-line bg-white p-5 shadow-sm">
-                        <div className="flex items-center justify-between border-b border-line pb-3 mb-4">
-                          <strong className="font-serif text-lg text-ink">Subject: {subj.name}</strong>
+                      <div key={subj.id} className="border border-line bg-white p-5 shadow-sm space-y-4">
+                        <div className="flex flex-wrap items-center justify-between border-b border-line pb-3 gap-3">
+                          <div className="flex items-center gap-3">
+                            <strong className="font-serif text-lg text-ink">Subject: {subj.name}</strong>
+                            {isSubjectSelected && (
+                              <div className="flex items-center gap-1.5 bg-indigo/10 border border-indigo/30 px-2.5 py-1 rounded text-xs">
+                                <span className="font-semibold text-indigo">Number of Questions for {subj.name}:</span>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={100}
+                                  value={subjectQuestionCounts[subj.name] ?? subjectQuestionCounts[subj.id] ?? 25}
+                                  onChange={(e) => {
+                                    const val = Math.max(1, parseInt(e.target.value) || 0);
+                                    setSubjectQuestionCounts((prev) => ({
+                                      ...prev,
+                                      [subj.name]: val,
+                                      [subj.id]: val,
+                                    }));
+                                  }}
+                                  className="w-16 border border-indigo/40 bg-white px-1.5 py-0.5 text-xs text-ink font-bold text-center focus:outline-none focus:ring-1 focus:ring-indigo rounded"
+                                />
+                              </div>
+                            )}
+                          </div>
                           <button
                             onClick={() => toggleSubjectSelection(subj.id)}
                             className={`px-3 py-1 text-xs font-medium border transition-all ${
@@ -1721,7 +1820,7 @@ export default function StudentDashboardPage() {
                                 : "bg-paper border-line text-slate hover:border-ink"
                             }`}
                           >
-                            {isSubjectSelected ? "✓ All Topics Selected" : "Select Entire Subject"}
+                            {isSubjectSelected ? "✓ Subject Selected" : "Select Subject"}
                           </button>
                         </div>
 
@@ -1794,11 +1893,44 @@ export default function StudentDashboardPage() {
                     </select>
                   </div>
 
+                  {/* ADMIN PATTERNS SELECTION FOR DOWNLOAD */}
+                  {customPatterns.length > 0 && (
+                    <div className="border border-indigo/30 bg-white p-4 space-y-2 rounded">
+                      <label className="text-xs font-bold text-indigo uppercase block">
+                        Choose Pattern (Uploaded / Applied by Admin) *
+                      </label>
+                      <div className="grid sm:grid-cols-3 gap-2">
+                        {customPatterns.map((pat) => {
+                          const isSelected = selectedPatternId === pat.id;
+                          return (
+                            <button
+                              key={pat.id}
+                              type="button"
+                              onClick={() => applyAdminPattern(pat)}
+                              className={`p-2.5 border text-left rounded text-xs transition-all ${
+                                isSelected
+                                  ? "border-indigo bg-indigo text-paper font-bold shadow"
+                                  : "border-line bg-paper hover:border-indigo text-slate hover:text-ink"
+                              }`}
+                            >
+                              <div className="flex justify-between items-center">
+                                <span>{pat.name}</span>
+                                <span className={`text-[10px] px-1 rounded ${isSelected ? "bg-amber text-ink" : "bg-indigo/10 text-indigo"}`}>
+                                  {pat.total_questions} Qs
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* STEP 2: SELECT SUBJECT(S) (SINGLE OR MULTIPLE) */}
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-xs font-bold text-ink uppercase block">
-                        Step 2: Select Subject(s) (Single or Multiple Subjects) *
+                        Step 2: Select Subject(s) & Set Questions Count per Subject *
                       </label>
                       <button
                         type="button"
@@ -1812,7 +1944,7 @@ export default function StudentDashboardPage() {
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                       {(mockExamId !== "all"
                         ? subjects.filter((s) => s.exam_type_id === mockExamId)
                         : subjects
@@ -1820,28 +1952,43 @@ export default function StudentDashboardPage() {
                         const isChecked = mockSelectedSubjectIds.includes(s.id);
                         const subExam = exams.find((ex) => ex.id === s.exam_type_id);
                         return (
-                          <label
-                            key={s.id}
-                            className={`p-3 border text-xs flex items-center justify-between cursor-pointer transition-all ${
-                              isChecked
-                                ? "border-indigo bg-indigo/10 text-indigo font-bold shadow-sm ring-1 ring-indigo"
-                                : "border-line bg-white text-slate hover:border-ink"
-                            }`}
-                          >
-                            <span className="truncate pr-1">[{subExam?.code || "EXAM"}] {s.name}</span>
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => {
-                                setMockSelectedSubjectIds((prev) =>
-                                  prev.includes(s.id)
-                                    ? prev.filter((id) => id !== s.id)
-                                    : [...prev, s.id]
-                                );
-                              }}
-                              className="w-4 h-4 accent-indigo cursor-pointer shrink-0"
-                            />
-                          </label>
+                          <div key={s.id} className="flex flex-col gap-1.5 border border-line p-3 bg-white rounded">
+                            <label className="text-xs flex items-center justify-between cursor-pointer font-semibold">
+                              <span className="truncate pr-1 text-ink">[{subExam?.code || "EXAM"}] {s.name}</span>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => {
+                                  setMockSelectedSubjectIds((prev) =>
+                                    prev.includes(s.id)
+                                      ? prev.filter((id) => id !== s.id)
+                                      : [...prev, s.id]
+                                  );
+                                }}
+                                className="w-4 h-4 accent-indigo cursor-pointer shrink-0"
+                              />
+                            </label>
+                            {isChecked && (
+                              <div className="flex items-center justify-between bg-indigo/5 border border-indigo/20 px-2 py-1 text-xs">
+                                <span className="text-[11px] font-semibold text-indigo">Questions Count:</span>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={100}
+                                  value={subjectQuestionCounts[s.name] ?? subjectQuestionCounts[s.id] ?? 25}
+                                  onChange={(e) => {
+                                    const val = Math.max(1, parseInt(e.target.value) || 0);
+                                    setSubjectQuestionCounts((prev) => ({
+                                      ...prev,
+                                      [s.name]: val,
+                                      [s.id]: val,
+                                    }));
+                                  }}
+                                  className="w-16 border border-indigo/40 bg-white px-1.5 py-0.5 text-xs text-ink font-bold text-center focus:outline-none focus:ring-1 focus:ring-indigo rounded"
+                                />
+                              </div>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
