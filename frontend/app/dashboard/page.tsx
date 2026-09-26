@@ -168,6 +168,7 @@ export default function StudentDashboardPage() {
   // Dynamic Pattern & Per-Subject Question Count State
   const [subjectQuestionCounts, setSubjectQuestionCounts] = useState<Record<string, number>>({});
   const [selectedPatternId, setSelectedPatternId] = useState<string>("");
+  const [paperFormatMode, setPaperFormatMode] = useState<"standard" | "custom">("custom");
 
   // CBT Test Engine State
   const [testSession, setTestSession] = useState<{
@@ -561,20 +562,21 @@ export default function StudentDashboardPage() {
     try {
       const selectedExamObj = knowledgeBaseExams.find((e) => e.id === mockExamId);
 
+      const targetSubjects = (mockExamId !== "all"
+        ? subjects.filter((s) => s.exam_type_id === mockExamId)
+        : subjects
+      ).filter((s) => mockSelectedSubjectIds.length === 0 || mockSelectedSubjectIds.includes(s.id));
+
       let totalCustomSum = 0;
       let effectiveSubjectCounts: Record<string, number> = {};
 
-      if (mockSelectedSubjectIds.length > 0) {
-        subjects
-          .filter((s) => mockSelectedSubjectIds.includes(s.id))
-          .forEach((s) => {
-            const cnt = subjectQuestionCounts[s.name] ?? subjectQuestionCounts[s.id] ?? 25;
-            effectiveSubjectCounts[s.name] = cnt;
-            totalCustomSum += cnt;
-          });
-      }
+      targetSubjects.forEach((s) => {
+        const cnt = subjectQuestionCounts[s.name] ?? subjectQuestionCounts[s.id] ?? 25;
+        effectiveSubjectCounts[s.name] = cnt;
+        totalCustomSum += cnt;
+      });
 
-      const effectiveCount = totalCustomSum > 0 ? totalCustomSum : mockPaperCount;
+      const effectiveCount = (paperFormatMode === "custom" && totalCustomSum > 0) ? totalCustomSum : mockPaperCount;
 
       const res = await api.post<MockPaperPackage>("/api/v1/questions/download-mock-paper", {
         title: mockPaperTitle,
@@ -585,7 +587,7 @@ export default function StudentDashboardPage() {
         topic_ids: mockTopicScope === "selected" ? mockSelectedTopics : [],
         difficulty: mockDifficulty,
         source_material: "textbooks_and_pyqs_only",
-        subject_counts: Object.keys(effectiveSubjectCounts).length > 0 ? effectiveSubjectCounts : subjectQuestionCounts,
+        subject_counts: effectiveSubjectCounts,
         positive_marks: positiveMarks,
         negative_marks: negativeMarks,
       });
@@ -596,6 +598,23 @@ export default function StudentDashboardPage() {
       setGeneratingMockPackage(false);
     }
   }
+
+  // Active Subject Question Count Summary & Effective Total for Format Choice
+  const selectedOrExamSubjects = (mockExamId !== "all"
+    ? subjects.filter((s) => s.exam_type_id === mockExamId)
+    : subjects
+  ).filter((s) => mockSelectedSubjectIds.length === 0 || mockSelectedSubjectIds.includes(s.id));
+
+  let customSubjectSum = 0;
+  const summaryParts: string[] = [];
+  selectedOrExamSubjects.forEach((s) => {
+    const cnt = subjectQuestionCounts[s.name] ?? subjectQuestionCounts[s.id] ?? 25;
+    customSubjectSum += cnt;
+    summaryParts.push(`${s.name}: ${cnt}`);
+  });
+
+  const activeSubjectCountSummary = summaryParts.join(" + ");
+  const effectiveMockPaperCount = (paperFormatMode === "custom" && customSubjectSum > 0) ? customSubjectSum : mockPaperCount;
 
   function printTestPaperOnly() {
     if (!mockPackage) return;
@@ -1576,6 +1595,57 @@ export default function StudentDashboardPage() {
                           </button>
                         </div>
 
+                        {/* TOPIC SEQUENTIAL PROGRESSION MAP */}
+                        {topicsList.length > 0 && (
+                          <div className="mb-6 p-4 border border-indigo/20 bg-indigo/5 rounded space-y-3">
+                            <div className="flex items-center justify-between border-b border-indigo/20 pb-2">
+                              <span className="text-xs font-bold text-indigo uppercase tracking-wider flex items-center gap-1.5">
+                                <span>🗺️</span> {subj.name} Topic Sequential Learning Roadmap (Topic 1 ➔ Topic 2 ➔ Topic 3 Map)
+                              </span>
+                              <span className="text-[10px] font-mono bg-indigo text-paper px-2 py-0.5 rounded font-bold">
+                                {topicsList.length} Connected Nodes
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin">
+                              {topicsList.map((top, tIdx) => (
+                                <div key={top.id} className="flex items-center gap-2 shrink-0">
+                                  <div className="border border-indigo/30 bg-white p-3 rounded shadow-sm hover:border-indigo transition-all min-w-[180px] max-w-[220px]">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className="text-[10px] font-mono font-bold bg-indigo/10 text-indigo px-1.5 py-0.5 rounded">
+                                        Topic {tIdx + 1}
+                                      </span>
+                                      <span className="text-[10px] text-slate font-semibold">{topicQuestionPoolSize} Qs</span>
+                                    </div>
+                                    <strong className="text-xs font-bold text-ink leading-tight block truncate mb-2" title={top.name}>
+                                      {top.name}
+                                    </strong>
+                                    <button
+                                      onClick={() =>
+                                        startTest({
+                                          title: `${activePattern.code} Topic Test: ${top.name}`,
+                                          mode: "topic",
+                                          topicIds: [top.id],
+                                          topicName: top.name,
+                                          count: topicQuestionPoolSize,
+                                        })
+                                      }
+                                      disabled={loadingTest}
+                                      className="w-full py-1 text-[11px] font-bold bg-indigo text-paper hover:bg-ink transition-colors rounded"
+                                    >
+                                      Start Topic {tIdx + 1} ➔
+                                    </button>
+                                  </div>
+
+                                  {tIdx < topicsList.length - 1 && (
+                                    <span className="text-indigo font-bold text-lg px-1 select-none">➔</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         {topicsList.length > 0 ? (
                           <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
                             {topicsList.map((top) => (
@@ -1925,6 +1995,54 @@ export default function StudentDashboardPage() {
                     </select>
                   </div>
 
+                  {/* FORMAT CHOICE: STANDARD FORM VS DESIGN YOUR FORMAT */}
+                  <div className="border border-indigo/30 bg-white p-4 rounded space-y-2">
+                    <label className="text-xs font-bold text-indigo uppercase block">
+                      Choose Question Paper Format *
+                    </label>
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setPaperFormatMode("standard")}
+                        className={`p-3 border text-left rounded text-xs transition-all ${
+                          paperFormatMode === "standard"
+                            ? "border-indigo bg-indigo text-paper font-bold shadow"
+                            : "border-line bg-paper hover:border-indigo text-slate hover:text-ink"
+                        }`}
+                      >
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="font-semibold text-sm">Option 1: Standard Exam Form</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${paperFormatMode === "standard" ? "bg-amber text-ink font-bold" : "bg-indigo/10 text-indigo"}`}>
+                            Standard Count
+                          </span>
+                        </div>
+                        <p className="text-[11px] opacity-90">
+                          Use fixed total questions dropdown (e.g. 30 Qs, 45 Qs, 90 Qs, 180 Qs) or pre-uploaded admin pattern.
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setPaperFormatMode("custom")}
+                        className={`p-3 border text-left rounded text-xs transition-all ${
+                          paperFormatMode === "custom"
+                            ? "border-indigo bg-indigo text-paper font-bold shadow"
+                            : "border-line bg-paper hover:border-indigo text-slate hover:text-ink"
+                        }`}
+                      >
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="font-semibold text-sm">Option 2: Design Your Format</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${paperFormatMode === "custom" ? "bg-amber text-ink font-bold" : "bg-indigo/10 text-indigo"}`}>
+                            Dynamic Per-Subject Sum
+                          </span>
+                        </div>
+                        <p className="text-[11px] opacity-90">
+                          Calculate total paper count dynamically as sum of questions set per subject (e.g. 25 + 25 + 25 = 75 Qs).
+                        </p>
+                      </button>
+                    </div>
+                  </div>
+
                   {/* ADMIN PATTERNS SELECTION FOR DOWNLOAD */}
                   {customPatterns.length > 0 && (
                     <div className="border border-indigo/30 bg-white p-4 space-y-2 rounded">
@@ -1938,7 +2056,10 @@ export default function StudentDashboardPage() {
                             <button
                               key={pat.id}
                               type="button"
-                              onClick={() => applyAdminPattern(pat)}
+                              onClick={() => {
+                                applyAdminPattern(pat);
+                                setPaperFormatMode("standard");
+                              }}
                               className={`p-2.5 border text-left rounded text-xs transition-all ${
                                 isSelected
                                   ? "border-indigo bg-indigo text-paper font-bold shadow"
@@ -2105,19 +2226,30 @@ export default function StudentDashboardPage() {
                     </div>
                     <div>
                       <label className="text-xs font-bold text-slate uppercase block mb-1">Question Count</label>
-                      <select
-                        value={mockPaperCount}
-                        onChange={(e) => setMockPaperCount(Number(e.target.value))}
-                        className="w-full border border-line bg-white px-3 py-2 text-xs text-ink focus:outline-none font-medium"
-                      >
-                        <option value={10}>10 Questions (Quick Quiz)</option>
-                        <option value={15}>15 Questions (Classroom Unit Test)</option>
-                        <option value={30}>30 Questions (Standard Subject Mock)</option>
-                        <option value={45}>45 Questions (NEET Single Subject Mock)</option>
-                        <option value={60}>60 Questions (KCET Full Subject Mock)</option>
-                        <option value={90}>90 Questions (JEE Main Mock Paper)</option>
-                        <option value={180}>180 Questions (Full Length NEET Paper)</option>
-                      </select>
+                      {paperFormatMode === "custom" ? (
+                        <div className="w-full border border-indigo/40 bg-indigo/10 px-2.5 py-1.5 text-xs text-indigo font-bold rounded flex flex-col justify-center">
+                          <span className="text-[11px] text-ink font-bold">
+                            Design Format Total: {effectiveMockPaperCount} Qs
+                          </span>
+                          <span className="text-[10px] text-indigo font-normal truncate">
+                            ({activeSubjectCountSummary || "25 Qs per subject"})
+                          </span>
+                        </div>
+                      ) : (
+                        <select
+                          value={mockPaperCount}
+                          onChange={(e) => setMockPaperCount(Number(e.target.value))}
+                          className="w-full border border-line bg-white px-3 py-2 text-xs text-ink focus:outline-none font-medium"
+                        >
+                          <option value={10}>10 Questions (Quick Quiz)</option>
+                          <option value={15}>15 Questions (Classroom Unit Test)</option>
+                          <option value={30}>30 Questions (Standard Subject Mock)</option>
+                          <option value={45}>45 Questions (NEET Single Subject Mock)</option>
+                          <option value={60}>60 Questions (KCET Full Subject Mock)</option>
+                          <option value={90}>90 Questions (JEE Main Mock Paper)</option>
+                          <option value={180}>180 Questions (Full Length NEET Paper)</option>
+                        </select>
+                      )}
                     </div>
                     <div>
                       <label className="text-xs font-bold text-slate uppercase block mb-1">Positive Marks per Question</label>
@@ -2154,7 +2286,9 @@ export default function StudentDashboardPage() {
                   disabled={generatingMockPackage}
                   className="w-full bg-indigo text-paper py-3.5 font-bold text-sm hover:bg-ink transition-colors shadow mb-8 disabled:opacity-50"
                 >
-                  {generatingMockPackage ? "⚡ Extracting Grounded Questions & Rendering Papers Package..." : "📥 Step 4: Generate & Download 2 Mock Papers Package (Printable)"}
+                  {generatingMockPackage
+                    ? "⚡ Extracting Grounded Questions & Rendering Papers Package..."
+                    : `📥 Step 4: Generate & Download 2 Mock Papers Package (${effectiveMockPaperCount} Questions Printable)`}
                 </button>
 
                 {mockPackage && (
