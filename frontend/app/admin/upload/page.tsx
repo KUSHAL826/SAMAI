@@ -1174,8 +1174,35 @@ export default function AdminKnowledgeBasePage() {
           <div className="space-y-8">
             <form onSubmit={handleUploadFullMockPaper} className="space-y-8">
               <section className="border border-line bg-paper p-6 sm:p-8 shadow-sm space-y-6">
+                <h2 className="text-lg font-bold font-serif text-ink border-b border-line pb-2 flex items-center justify-between">
+                  <span>1. Choose Target Exam(s)</span>
+                  <span className="text-xs font-sans text-indigo font-bold">* Select Entrance Exam First</span>
+                </h2>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  {examTypes.map((exam) => {
+                    const isChecked = mockSelectedExamIds.includes(exam.id);
+                    return (
+                      <div
+                        key={exam.id}
+                        onClick={() => toggleMockExamSelection(exam.id)}
+                        className={`cursor-pointer p-4 border transition-all flex flex-col justify-between ${
+                          isChecked ? "border-indigo bg-indigo text-paper shadow-sm" : "border-line bg-white text-ink hover:border-ink"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-bold text-base font-serif">{exam.code}</span>
+                          <input type="checkbox" checked={isChecked} onChange={() => {}} className="w-4 h-4 accent-amber" />
+                        </div>
+                        <span className={`text-xs ${isChecked ? "text-paper/80" : "text-slate"}`}>{exam.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="border border-line bg-paper p-6 sm:p-8 shadow-sm space-y-6">
                 <h2 className="text-lg font-bold font-serif text-ink border-b border-line pb-2">
-                  1. Select Mock Paper Scope (No Topic Required)
+                  2. Select Mock Paper Scope & Filtered Subject
                 </h2>
 
                 <div className="grid sm:grid-cols-2 gap-4">
@@ -1210,45 +1237,29 @@ export default function AdminKnowledgeBasePage() {
 
                 {mockScope === "subject" && (
                   <div>
-                    <label className="block text-xs font-bold text-ink uppercase mb-2">Select Subject</label>
+                    <label className="block text-xs font-bold text-ink uppercase mb-2">
+                      Select Subject (Filtered to Selected Target Exam)
+                    </label>
                     <select
                       value={mockSubjectId}
                       onChange={(e) => setMockSubjectId(e.target.value)}
-                      className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
+                      className="w-full border border-indigo/40 bg-indigo/5 px-3 py-2 text-sm text-ink focus:outline-none font-bold"
                     >
                       <option value="">Choose Subject...</option>
-                      {subjects.map((s) => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
+                      {(mockSelectedExamIds.length > 0
+                        ? subjects.filter((s) => mockSelectedExamIds.includes(s.exam_type_id))
+                        : subjects
+                      ).map((s) => {
+                        const subExam = examTypes.find((ex) => ex.id === s.exam_type_id);
+                        return (
+                          <option key={s.id} value={s.id}>
+                            [{subExam?.code || "EXAM"}] {s.name}
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                 )}
-              </section>
-
-              <section className="border border-line bg-paper p-6 sm:p-8 shadow-sm space-y-6">
-                <h2 className="text-lg font-bold font-serif text-ink border-b border-line pb-2">
-                  2. Choose Target Exam(s)
-                </h2>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  {examTypes.map((exam) => {
-                    const isChecked = mockSelectedExamIds.includes(exam.id);
-                    return (
-                      <div
-                        key={exam.id}
-                        onClick={() => toggleMockExamSelection(exam.id)}
-                        className={`cursor-pointer p-4 border transition-all flex flex-col justify-between ${
-                          isChecked ? "border-indigo bg-indigo text-paper shadow-sm" : "border-line bg-white text-ink hover:border-ink"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-bold text-base font-serif">{exam.code}</span>
-                          <input type="checkbox" checked={isChecked} onChange={() => {}} className="w-4 h-4 accent-amber" />
-                        </div>
-                        <span className={`text-xs ${isChecked ? "text-paper/80" : "text-slate"}`}>{exam.name}</span>
-                      </div>
-                    );
-                  })}
-                </div>
               </section>
 
               <section className="border border-line bg-paper p-6 sm:p-8 shadow-sm space-y-4">

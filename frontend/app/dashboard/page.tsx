@@ -221,6 +221,7 @@ export default function StudentDashboardPage() {
   const [generatingMockPackage, setGeneratingMockPackage] = useState(false);
   const [knowledgeBaseExams, setKnowledgeBaseExams] = useState<any[]>([]);
   const [mockExamId, setMockExamId] = useState<string>("all");
+  const [mockSubjectId, setMockSubjectId] = useState<string>("all");
   const [mockTopicScope, setMockTopicScope] = useState<"all" | "selected">("all");
   const [mockSelectedTopics, setMockSelectedTopics] = useState<string[]>([]);
   const [mockDifficulty, setMockDifficulty] = useState<string>("mixed");
@@ -523,6 +524,7 @@ export default function StudentDashboardPage() {
         title: mockPaperTitle,
         question_count: mockPaperCount,
         exam_type_id: mockExamId !== "all" ? mockExamId : undefined,
+        subject_ids: mockSubjectId !== "all" ? [mockSubjectId] : [],
         exam_code: selectedExamObj ? selectedExamObj.code : activePattern.code,
         topic_ids: mockTopicScope === "selected" ? mockSelectedTopics : [],
         difficulty: mockDifficulty,
@@ -1706,81 +1708,64 @@ export default function StudentDashboardPage() {
                   </div>
                 </div>
 
-                {/* Config Form */}
+                {/* Config Form: 4-Step Dynamic Workflow */}
                 <div className="space-y-6 mb-8 bg-paper p-6 border border-line">
-                  <div className="grid sm:grid-cols-2 gap-6">
-                    {/* 1. Target Exam */}
-                    <div>
-                      <label className="text-xs font-bold text-ink uppercase block mb-2">1. Target Exam / Knowledge Base Source</label>
-                      <select
-                        value={mockExamId}
-                        onChange={(e) => {
-                          setMockExamId(e.target.value);
-                          setMockSelectedTopics([]);
-                        }}
-                        className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none font-semibold"
-                      >
-                        <option value="all">All Exams Knowledge Base</option>
-                        {knowledgeBaseExams.map((ex) => (
-                          <option key={ex.id} value={ex.id}>
-                            {ex.name} ({ex.code}) - [{ex.document_count || 0} Textbooks/PYQs]
+                  {/* STEP 1: TARGET EXAM */}
+                  <div>
+                    <label className="text-xs font-bold text-indigo uppercase block mb-1">
+                      Step 1: Select Target Exam Dropdown *
+                    </label>
+                    <select
+                      value={mockExamId}
+                      onChange={(e) => {
+                        const newExamId = e.target.value;
+                        setMockExamId(newExamId);
+                        setMockSelectedTopics([]);
+                      }}
+                      className="w-full border border-indigo/50 bg-indigo/5 px-3 py-2.5 text-sm text-ink focus:outline-none font-bold"
+                    >
+                      <option value="all">-- All Entrance Exams --</option>
+                      {knowledgeBaseExams.map((ex) => (
+                        <option key={ex.id} value={ex.id}>
+                          {ex.code} — {ex.name} [{ex.document_count || 0} Textbooks/PYQs]
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* STEP 2: SELECT SUBJECT (FILTERED TO TARGET EXAM) */}
+                  <div>
+                    <label className="text-xs font-bold text-ink uppercase block mb-1">
+                      Step 2: Select Subject Dropdown (Filtered to Selected Exam) *
+                    </label>
+                    <select
+                      value={mockSubjectId}
+                      onChange={(e) => {
+                        setMockSubjectId(e.target.value);
+                        setMockSelectedTopics([]);
+                      }}
+                      className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none font-semibold"
+                    >
+                      <option value="all">-- All Subjects for Selected Exam --</option>
+                      {(mockExamId !== "all"
+                        ? subjects.filter((s) => s.exam_type_id === mockExamId)
+                        : subjects
+                      ).map((s) => {
+                        const subExam = exams.find((ex) => ex.id === s.exam_type_id);
+                        return (
+                          <option key={s.id} value={s.id}>
+                            [{subExam?.code || "EXAM"}] {s.name}
                           </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* 2. Paper Title */}
-                    <div>
-                      <label className="text-xs font-bold text-ink uppercase block mb-2">2. Paper Title</label>
-                      <input
-                        type="text"
-                        value={mockPaperTitle}
-                        onChange={(e) => setMockPaperTitle(e.target.value)}
-                        className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
-                        placeholder="e.g. NEET All India Mock Test"
-                      />
-                    </div>
+                        );
+                      })}
+                    </select>
                   </div>
 
-                  <div className="grid sm:grid-cols-2 gap-6">
-                    {/* 3. Number of Questions */}
-                    <div>
-                      <label className="text-xs font-bold text-ink uppercase block mb-2">3. Total Number of Questions</label>
-                      <select
-                        value={mockPaperCount}
-                        onChange={(e) => setMockPaperCount(Number(e.target.value))}
-                        className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
-                      >
-                        <option value={10}>10 Questions (Quick Quiz)</option>
-                        <option value={15}>15 Questions (Classroom Unit Test)</option>
-                        <option value={30}>30 Questions (Standard Subject Mock)</option>
-                        <option value={45}>45 Questions (NEET Single Subject Mock)</option>
-                        <option value={60}>60 Questions (KCET Full Subject Mock)</option>
-                        <option value={90}>90 Questions (JEE Main Mock Paper)</option>
-                        <option value={180}>180 Questions (Full Length NEET Paper)</option>
-                        <option value={200}>200 Questions (Full NEET Pattern Paper)</option>
-                      </select>
-                    </div>
-
-                    {/* 4. Question Difficulty Level */}
-                    <div>
-                      <label className="text-xs font-bold text-ink uppercase block mb-2">4. Question Difficulty Level</label>
-                      <select
-                        value={mockDifficulty}
-                        onChange={(e) => setMockDifficulty(e.target.value)}
-                        className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
-                      >
-                        <option value="mixed">Mixed (Exam Blueprint Standard: 30% Easy, 50% Medium, 20% Hard)</option>
-                        <option value="easy">Easy Level Questions Only</option>
-                        <option value="moderate">Moderate / Medium Level Questions Only</option>
-                        <option value="difficult">Difficult / Hard Level Questions Only</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* 5. Topic Scope Selection */}
+                  {/* STEP 3: SELECT TOPICS / CHAPTERS */}
                   <div className="border-t border-line pt-4">
-                    <label className="text-xs font-bold text-ink uppercase block mb-2">5. Syllabus / Topic Scope Selection</label>
+                    <label className="text-xs font-bold text-ink uppercase block mb-2">
+                      Step 3: Select Syllabus / Topic Scope *
+                    </label>
                     <div className="flex items-center gap-6 mb-4">
                       <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
                         <input
@@ -1793,7 +1778,7 @@ export default function StudentDashboardPage() {
                           }}
                           className="accent-indigo"
                         />
-                        All Topics (Complete Exam Syllabus)
+                        All Topics under Subject / Exam
                       </label>
                       <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
                         <input
@@ -1803,7 +1788,7 @@ export default function StudentDashboardPage() {
                           onChange={() => setMockTopicScope("selected")}
                           className="accent-indigo"
                         />
-                        Specific Selected Topics / Chapters
+                        Specific Selected Topics
                       </label>
                     </div>
 
@@ -1840,14 +1825,58 @@ export default function StudentDashboardPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* STEP 4 CONFIGURATIONS: TITLE, COUNT & DIFFICULTY */}
+                  <div className="border-t border-line pt-4 grid sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="text-xs font-bold text-slate uppercase block mb-1">Paper Title</label>
+                      <input
+                        type="text"
+                        value={mockPaperTitle}
+                        onChange={(e) => setMockPaperTitle(e.target.value)}
+                        className="w-full border border-line bg-white px-3 py-2 text-xs text-ink focus:outline-none font-medium"
+                        placeholder="e.g. NEET All India Mock Test"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate uppercase block mb-1">Question Count</label>
+                      <select
+                        value={mockPaperCount}
+                        onChange={(e) => setMockPaperCount(Number(e.target.value))}
+                        className="w-full border border-line bg-white px-3 py-2 text-xs text-ink focus:outline-none font-medium"
+                      >
+                        <option value={10}>10 Questions (Quick Quiz)</option>
+                        <option value={15}>15 Questions (Classroom Unit Test)</option>
+                        <option value={30}>30 Questions (Standard Subject Mock)</option>
+                        <option value={45}>45 Questions (NEET Single Subject Mock)</option>
+                        <option value={60}>60 Questions (KCET Full Subject Mock)</option>
+                        <option value={90}>90 Questions (JEE Main Mock Paper)</option>
+                        <option value={180}>180 Questions (Full Length NEET Paper)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate uppercase block mb-1">Difficulty Level</label>
+                      <select
+                        value={mockDifficulty}
+                        onChange={(e) => setMockDifficulty(e.target.value)}
+                        className="w-full border border-line bg-white px-3 py-2 text-xs text-ink focus:outline-none font-medium"
+                      >
+                        <option value="mixed">Mixed (Blueprint Standard)</option>
+                        <option value="easy">Easy Level</option>
+                        <option value="moderate">Moderate Level</option>
+                        <option value="difficult">Difficult Level</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
+                {/* STEP 4: ACTION DOWNLOAD BUTTON */}
                 <button
                   onClick={generateMockPaperPackage}
                   disabled={generatingMockPackage}
-                  className="w-full bg-indigo text-paper py-3.5 font-medium text-sm hover:bg-ink transition-colors shadow mb-8 disabled:opacity-50"
+                  className="w-full bg-indigo text-paper py-3.5 font-bold text-sm hover:bg-ink transition-colors shadow mb-8 disabled:opacity-50"
                 >
-                  {generatingMockPackage ? "Extracting Grounded Questions & Rendering Papers Package..." : "⚡ Generate 2 Mock Papers Package (Strict Grounded RAG)"}
+                  {generatingMockPackage ? "⚡ Extracting Grounded Questions & Rendering Papers Package..." : "📥 Step 4: Generate & Download 2 Mock Papers Package (Printable)"}
                 </button>
 
                 {mockPackage && (
