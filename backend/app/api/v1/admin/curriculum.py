@@ -137,6 +137,16 @@ async def list_exam_types(db: AsyncSession = Depends(get_db)):
     return result.scalars().all()
 
 
+@router.delete("/exam-types/{exam_type_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_exam_type(exam_type_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    exam_type = await db.get(ExamType, exam_type_id)
+    if not exam_type:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Exam type not found.")
+    await db.delete(exam_type)
+    await db.commit()
+    return None
+
+
 # ---------- Subjects ----------
 
 @router.post("/subjects", response_model=SubjectOut, status_code=status.HTTP_201_CREATED)

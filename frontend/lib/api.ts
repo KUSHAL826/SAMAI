@@ -49,6 +49,7 @@ export const api = {
       body: body instanceof FormData ? body : JSON.stringify(body ?? {}),
       auth,
     }),
+  delete: <T>(path: string, auth = false) => request<T>(path, { method: "DELETE", auth }),
 };
 
 export function saveToken(token: string) {

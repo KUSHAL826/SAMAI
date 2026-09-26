@@ -284,6 +284,28 @@ async def create_mock_test(
             "explanation": q.explanation,
         })
 
+    # If topic filter returned no questions, fallback to any active QuestionBank questions for this exam
+    if len(questions_out) == 0:
+        fallback_qb_query = select(QuestionBank).where(QuestionBank.is_active.is_(True))
+        if exam_type_id and str(exam_type_id) != "all":
+            try:
+                fallback_qb_query = fallback_qb_query.where(QuestionBank.exam_type_id == uuid.UUID(str(exam_type_id)))
+            except ValueError:
+                pass
+        fallback_qb_res = await db.execute(fallback_qb_query)
+        fallback_questions = fallback_qb_res.scalars().all()
+        for q in fallback_questions:
+            questions_out.append({
+                "id": str(q.id),
+                "question_text": q.question_text,
+                "options": q.options,
+                "difficulty": q.difficulty.value if hasattr(q.difficulty, "value") else str(q.difficulty),
+                "topic_id": str(q.topic_id) if q.topic_id else None,
+                "subject_id": str(q.subject_id) if q.subject_id else None,
+                "correct_answer": q.correct_answer,
+                "explanation": q.explanation,
+            })
+
     needed = count - len(questions_out)
 
     # 2. RAG Extraction from Admin Uploaded Textbooks & PYQs
@@ -432,6 +454,29 @@ async def submit_test(
     total_attempted = correct_count + incorrect_count
     accuracy = round((correct_count / total_attempted * 100), 2) if total_attempted > 0 else 0.0
 
+    # Categorize strong areas and areas to improve by topic/subject
+    topic_performance: dict[str, dict[str, int]] = {}
+    for q in questions:
+        t_name = q.get("topic_name") or q.get("subject_name") or "Core Knowledge"
+        if t_name not in topic_performance:
+            topic_performance[t_name] = {"correct": 0, "total": 0}
+        topic_performance[t_name]["total"] += 1
+        user_ans = user_answers.get(str(q.get("id")))
+        if user_ans and user_ans == q.get("correct_answer"):
+            topic_performance[t_name]["correct"] += 1
+
+    strong_areas = []
+    weak_areas = []
+    for t_name, stats in topic_performance.items():
+        acc = round((stats["correct"] / stats["total"] * 100), 1) if stats["total"] > 0 else 0.0
+        if acc >= 60.0:
+            strong_areas.append({"topic": t_name, "accuracy": acc, "correct": stats["correct"], "total": stats["total"]})
+        else:
+            weak_areas.append({"topic": t_name, "accuracy": acc, "correct": stats["correct"], "total": stats["total"]})
+
+    if not strong_areas and not weak_areas:
+        weak_areas = [{"topic": "Overall Syllabus Focus Needed", "accuracy": accuracy, "correct": correct_count, "total": len(questions)}]
+
     # Save to PostgreSQL DB if student is authenticated
     if current_student:
         try:
@@ -488,6 +533,8 @@ async def submit_test(
         "percentage": max(0.0, percentage),
         "accuracy": accuracy,
         "time_taken_seconds": time_taken,
+        "strong_areas": strong_areas,
+        "weak_areas": weak_areas,
         "solutions": solutions,
     }
 

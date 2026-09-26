@@ -38,6 +38,8 @@ type TestResult = {
   percentage: number;
   accuracy: number;
   time_taken_seconds: number;
+  strong_areas?: Array<{ topic: string; accuracy: number; correct: number; total: number }>;
+  weak_areas?: Array<{ topic: string; accuracy: number; correct: number; total: number }>;
   solutions: Array<{
     id: string;
     question_text: string;
@@ -1059,6 +1061,61 @@ export default function StudentDashboardPage() {
                 <span className="font-serif text-3xl font-bold text-slate mt-1 block font-mono">
                   {formatTime(testResult.time_taken_seconds)}
                 </span>
+              </div>
+            </div>
+
+            {/* Performance Breakdown: Strong Areas & Areas to Improve */}
+            <div className="grid md:grid-cols-2 gap-6 mb-8">
+              {/* Strong Areas */}
+              <div className="border border-emerald-300 bg-emerald-50/60 p-5 rounded-sm shadow-sm">
+                <h3 className="font-serif font-bold text-base text-emerald-900 mb-3 flex items-center gap-2">
+                  <span>🌟</span> Strong Areas & High Accuracy Topics
+                </h3>
+                {testResult.strong_areas && testResult.strong_areas.length > 0 ? (
+                  <div className="space-y-2">
+                    {testResult.strong_areas.map((sa, i) => (
+                      <div key={i} className="bg-white p-3 border border-emerald-200 flex items-center justify-between text-xs">
+                        <div>
+                          <strong className="text-emerald-950 font-bold block">{sa.topic}</strong>
+                          <span className="text-emerald-700">{sa.correct} / {sa.total} questions answered correctly</span>
+                        </div>
+                        <span className="font-mono font-bold text-emerald-800 bg-emerald-100 px-2 py-1 rounded">
+                          {sa.accuracy}% Accuracy
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-emerald-800 italic">
+                    Answer 60% or more questions correctly in a topic to unlock strong area mastery badges!
+                  </p>
+                )}
+              </div>
+
+              {/* Areas to Improve */}
+              <div className="border border-amber-300 bg-amber-50/60 p-5 rounded-sm shadow-sm">
+                <h3 className="font-serif font-bold text-base text-amber-900 mb-3 flex items-center gap-2">
+                  <span>🎯</span> Areas to Improve (Weak Topics Focus)
+                </h3>
+                {testResult.weak_areas && testResult.weak_areas.length > 0 ? (
+                  <div className="space-y-2">
+                    {testResult.weak_areas.map((wa, i) => (
+                      <div key={i} className="bg-white p-3 border border-amber-200 flex items-center justify-between text-xs">
+                        <div>
+                          <strong className="text-amber-950 font-bold block">{wa.topic}</strong>
+                          <span className="text-amber-800">Recommendation: Review textbook modules & retry practice questions</span>
+                        </div>
+                        <span className="font-mono font-bold text-amber-900 bg-amber-100 px-2 py-1 rounded">
+                          {wa.accuracy}% Accuracy
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-amber-800 italic">
+                    Great job! No major weak topics detected in this test session.
+                  </p>
+                )}
               </div>
             </div>
 

@@ -45,3 +45,13 @@ async def get_pattern(pattern_id: uuid.UUID, db: AsyncSession = Depends(get_db))
     if not pattern:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Exam pattern not found.")
     return pattern
+
+
+@router.delete("/{pattern_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_pattern(pattern_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    pattern = await db.get(ExamPattern, pattern_id)
+    if not pattern:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Exam pattern not found.")
+    await db.delete(pattern)
+    await db.commit()
+    return None

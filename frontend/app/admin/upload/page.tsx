@@ -191,6 +191,40 @@ export default function AdminKnowledgeBasePage() {
       .catch(() => setTopics([]));
   }, [newTopicChapterId]);
 
+  // --- DELETION HANDLERS FOR ADMIN ---
+  async function handleDeleteExam(id: string, name: string) {
+    if (!confirm(`Are you sure you want to delete Target Exam "${name}"?`)) return;
+    try {
+      await api.delete(`/api/v1/admin/exam-types/${id}`, true);
+      setSuccessMessage(`Target Exam "${name}" deleted successfully.`);
+      loadInitialData();
+    } catch (err: any) {
+      setError(err instanceof ApiError ? err.message : "Failed to delete target exam.");
+    }
+  }
+
+  async function handleDeletePattern(id: string, name: string) {
+    if (!confirm(`Are you sure you want to delete exam pattern "${name}"?`)) return;
+    try {
+      await api.delete(`/api/v1/admin/patterns/${id}`, true);
+      setSuccessMessage(`Exam pattern "${name}" deleted successfully.`);
+      loadInitialData();
+    } catch (err: any) {
+      setError(err instanceof ApiError ? err.message : "Failed to delete exam pattern.");
+    }
+  }
+
+  async function handleDeleteDocument(id: string, filename: string) {
+    if (!confirm(`Are you sure you want to delete course material "${filename}"?`)) return;
+    try {
+      await api.delete(`/api/v1/admin/documents/${id}`, true);
+      setSuccessMessage(`Course material "${filename}" deleted from Knowledge Base.`);
+      loadInitialData();
+    } catch (err: any) {
+      setError(err instanceof ApiError ? err.message : "Failed to delete course material.");
+    }
+  }
+
   // --- TAB 1 HANDLERS: Add Subjects, Chapters, Topics ---
   async function handleAddSubject(e: React.FormEvent) {
     e.preventDefault();
@@ -738,6 +772,36 @@ export default function AdminKnowledgeBasePage() {
               </form>
             </div>
 
+            {/* ALL PRESENT TARGET ENTRANCE EXAMS WITH DELETE BUTTONS */}
+            <div className="border border-indigo/30 bg-indigo/5 p-6 shadow-sm">
+              <h2 className="font-serif font-bold text-xl text-ink mb-4 pb-2 border-b border-indigo/20 flex items-center justify-between">
+                <span>🎓 All Present Target Entrance Exams ({examTypes.length})</span>
+                <span className="text-xs font-sans font-normal text-slate">Students can practice tests for these exams</span>
+              </h2>
+              <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {examTypes.map((ex) => (
+                  <div key={ex.id} className="p-4 border border-line bg-white flex flex-col justify-between shadow-sm">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-mono text-sm font-bold text-indigo bg-indigo/10 px-2 py-0.5 rounded">
+                          {ex.code}
+                        </span>
+                        <span className="text-[10px] text-slate font-mono">ID: {ex.id.slice(0, 8)}...</span>
+                      </div>
+                      <h3 className="font-serif font-bold text-sm text-ink">{ex.name}</h3>
+                    </div>
+
+                    <button
+                      onClick={() => handleDeleteExam(ex.id, ex.name)}
+                      className="mt-4 w-full bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 py-1.5 px-3 text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <span>🗑️ Delete Exam</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* CURRICULUM TREE PREVIEW */}
             <div className="border border-line bg-white p-6 shadow-sm">
               <h2 className="font-serif font-bold text-xl text-ink mb-4 pb-2 border-b border-line flex items-center justify-between">
@@ -1015,6 +1079,46 @@ export default function AdminKnowledgeBasePage() {
                 </button>
               </section>
             </form>
+
+            {/* PRESENT COURSE MATERIALS OVERVIEW */}
+            <div className="border border-line bg-white p-6 shadow-sm">
+              <h2 className="font-serif text-xl font-bold text-ink mb-4 pb-2 border-b border-line flex items-center justify-between">
+                <span>📚 All Present Uploaded Course Materials ({documents.length})</span>
+                <span className="text-xs font-sans font-normal text-slate">Indexed in SamAI Grounded Knowledge Base</span>
+              </h2>
+              <div className="space-y-3">
+                {documents.length === 0 ? (
+                  <p className="text-xs text-slate italic p-4 bg-paper border border-line">
+                    No course materials uploaded yet. Use the form above to upload textbooks for topics.
+                  </p>
+                ) : (
+                  documents.map((doc) => {
+                    const docExam = examTypes.find((ex) => ex.id === doc.exam_type_id);
+                    return (
+                      <div key={doc.id} className="p-4 border border-line bg-paper flex flex-wrap items-center justify-between gap-4 text-xs">
+                        <div className="space-y-1">
+                          <strong className="text-sm font-bold text-ink block">{doc.original_filename}</strong>
+                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate">
+                            <span className="font-mono bg-indigo/10 text-indigo px-2 py-0.5 rounded font-bold">
+                              {docExam?.code || "GENERAL"}
+                            </span>
+                            <span>Category: {doc.document_type}</span>
+                            <span>Status: {doc.status}</span>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => handleDeleteDocument(doc.id, doc.original_filename)}
+                          className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 py-1.5 px-3 font-bold transition-colors flex items-center gap-1 shrink-0"
+                        >
+                          <span>🗑️ Delete Material</span>
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
           </div>
         ) : activeTab === "full_mock" ? (
           /* TAB 3: FULL LENGTH MOCK PAPERS STUDIO */
@@ -1318,38 +1422,79 @@ export default function AdminKnowledgeBasePage() {
                 Active Configured Exam Patterns ({patterns.length})
               </h3>
               <div className="space-y-4">
-                {patterns.map((p) => (
-                  <div key={p.id} className="p-4 border border-line bg-paper flex flex-wrap items-center justify-between gap-4">
-                    <div>
-                      <strong className="font-serif text-base text-ink block">{p.name}</strong>
-                      <span className="text-xs text-slate">
-                        {p.duration_minutes} Mins | {p.total_questions} Questions | {p.total_marks} Marks | Marking: +{p.positive_marks} / {p.negative_marks}
-                      </span>
+                {patterns.length === 0 ? (
+                  <p className="text-xs text-slate italic p-4 bg-paper border border-line">
+                    No custom patterns added yet. Use the form above to configure official exam patterns.
+                  </p>
+                ) : (
+                  patterns.map((p) => (
+                    <div key={p.id} className="p-4 border border-line bg-paper flex flex-wrap items-center justify-between gap-4">
+                      <div>
+                        <strong className="font-serif text-base text-ink block">{p.name}</strong>
+                        <span className="text-xs text-slate">
+                          {p.duration_minutes} Mins | {p.total_questions} Questions | {p.total_marks} Marks | Marking: +{p.positive_marks} / {p.negative_marks}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-mono bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded font-bold">
+                          ACTIVE PATTERN
+                        </span>
+                        <button
+                          onClick={() => handleDeletePattern(p.id, p.name)}
+                          className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 py-1 px-3 text-xs font-bold transition-colors"
+                        >
+                          🗑️ Delete Pattern
+                        </button>
+                      </div>
                     </div>
-                    <span className="text-xs font-mono bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded font-bold">
-                      ACTIVE PATTERN
-                    </span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>
         ) : (
           /* TAB 5: INDEXED KNOWLEDGE LIBRARY */
           <div className="border border-line bg-white p-6 shadow-sm">
-            <h2 className="font-serif text-xl font-bold text-ink mb-4 pb-2 border-b border-line">
-              Uploaded Documents & Knowledge Library ({documents.length})
+            <h2 className="font-serif text-xl font-bold text-ink mb-4 pb-2 border-b border-line flex items-center justify-between">
+              <span>Uploaded Documents & Knowledge Library ({documents.length})</span>
+              <span className="text-xs font-sans font-normal text-slate">Manage & delete knowledge base documents</span>
             </h2>
             <div className="space-y-3">
-              {documents.map((doc) => (
-                <div key={doc.id} className="p-4 border border-line bg-paper flex items-center justify-between text-xs">
-                  <div>
-                    <strong className="text-sm font-medium text-ink block">{doc.original_filename}</strong>
-                    <span className="text-slate">Type: {doc.document_type} | Version: v{doc.version} | Status: {doc.status}</span>
-                  </div>
-                  <span className="font-mono bg-indigo/10 text-indigo px-2.5 py-1 rounded font-bold uppercase">{doc.status}</span>
-                </div>
-              ))}
+              {documents.length === 0 ? (
+                <p className="text-xs text-slate italic p-4 bg-paper border border-line">
+                  No documents uploaded yet.
+                </p>
+              ) : (
+                documents.map((doc) => {
+                  const docExam = examTypes.find((ex) => ex.id === doc.exam_type_id);
+                  return (
+                    <div key={doc.id} className="p-4 border border-line bg-paper flex flex-wrap items-center justify-between gap-4 text-xs">
+                      <div>
+                        <strong className="text-sm font-bold text-ink block">{doc.original_filename}</strong>
+                        <div className="flex flex-wrap items-center gap-2 text-slate text-[11px] mt-1">
+                          <span className="font-mono bg-indigo/10 text-indigo px-2 py-0.5 rounded font-bold">
+                            {docExam?.code || "ALL EXAMS"}
+                          </span>
+                          <span>Type: {doc.document_type}</span>
+                          <span>Version: v{doc.version}</span>
+                          <span>Status: {doc.status}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono bg-indigo/10 text-indigo px-2.5 py-1 rounded font-bold uppercase">
+                          {doc.status}
+                        </span>
+                        <button
+                          onClick={() => handleDeleteDocument(doc.id, doc.original_filename)}
+                          className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 py-1.5 px-3 text-xs font-bold transition-colors"
+                        >
+                          🗑️ Delete Material
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         )}

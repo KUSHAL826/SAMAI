@@ -232,3 +232,13 @@ async def get_document_status(document_id: uuid.UUID, db: AsyncSession = Depends
         current_step=job.current_step if job else None,
         error_message=job.error_message if job else None,
     )
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(document_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    doc = await db.get(Document, document_id)
+    if not doc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found.")
+    await db.delete(doc)
+    await db.commit()
+    return None
