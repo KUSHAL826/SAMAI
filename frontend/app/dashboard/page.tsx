@@ -226,6 +226,7 @@ export default function StudentDashboardPage() {
   const [mockTopicScope, setMockTopicScope] = useState<"all" | "selected">("all");
   const [mockSelectedTopics, setMockSelectedTopics] = useState<string[]>([]);
   const [mockDifficulty, setMockDifficulty] = useState<string>("mixed");
+  const [fullLengthTopicScope, setFullLengthTopicScope] = useState<"all" | "selected">("all");
 
   const [customPatterns, setCustomPatterns] = useState<any[]>([]);
 
@@ -1599,25 +1600,63 @@ export default function StudentDashboardPage() {
                         </span>
                       </div>
                       <h3 className="font-serif text-xl font-bold text-ink mb-2">
-                        Complete {activePattern.name} ({activePattern.code}) Full Syllabus Mock Test
+                        Official {activePattern.name} ({activePattern.code}) Exam Pattern ({activePattern.totalQuestions} Qs)
                       </h3>
-                      <p className="text-xs text-slate leading-relaxed mb-6">
-                        Complete timed mock exam generated for <strong>{activePattern.name} ({activePattern.code})</strong> covering <strong>All Topics</strong> across Physics, Chemistry, Biology & Math according to official exam blueprint.
+                      <p className="text-xs text-slate leading-relaxed mb-4">
+                        Official timed pattern exam generated for <strong>{activePattern.name} ({activePattern.code})</strong> following official blueprint ({activePattern.totalQuestions} Questions / {activePattern.durationMins} Mins).
                       </p>
+
+                      {/* TOPIC SCOPE SELECTOR */}
+                      <div className="bg-white p-3.5 border border-line rounded mb-5 space-y-2">
+                        <span className="text-xs font-bold text-indigo uppercase block">Select Topic Scope for Pattern Exam *</span>
+                        <label className="flex items-center gap-2 text-xs text-slate hover:text-ink cursor-pointer">
+                          <input
+                            type="radio"
+                            name="fullLengthScope"
+                            checked={fullLengthTopicScope === "all"}
+                            onChange={() => setFullLengthTopicScope("all")}
+                            className="accent-indigo"
+                          />
+                          <span><strong>All Syllabus Topics (Official Full Blueprint)</strong></span>
+                        </label>
+                        <label className="flex items-center gap-2 text-xs text-slate hover:text-ink cursor-pointer">
+                          <input
+                            type="radio"
+                            name="fullLengthScope"
+                            checked={fullLengthTopicScope === "selected"}
+                            onChange={() => setFullLengthTopicScope("selected")}
+                            className="accent-indigo"
+                          />
+                          <span>
+                            <strong>Specific Selected Topics ({selectedTopicIds.length} Selected)</strong>
+                            {selectedTopicIds.length === 0 && (
+                              <span className="text-amber-700 block text-[11px] font-normal">
+                                (Check topics in grid below to customize topic pool)
+                              </span>
+                            )}
+                          </span>
+                        </label>
+                      </div>
                     </div>
+
                     <button
                       onClick={() =>
                         startTest({
-                          title: `${activePattern.code} Official Blueprint Mock Test (${activePattern.totalQuestions} Qs) [${activePattern.name}]`,
-                          mode: "full_length",
+                          title: `${activePattern.code} ${fullLengthTopicScope === "selected" ? `Custom Topics (${selectedTopicIds.length} Topics)` : "Full Syllabus"} Official Pattern Test (${activePattern.totalQuestions} Qs)`,
+                          mode: fullLengthTopicScope === "selected" ? "multi_topic" : "full_length",
+                          topicIds: fullLengthTopicScope === "selected" ? selectedTopicIds : undefined,
                           count: activePattern.totalQuestions,
                           durationMins: activePattern.durationMins,
                         })
                       }
-                      disabled={loadingTest}
+                      disabled={loadingTest || (fullLengthTopicScope === "selected" && selectedTopicIds.length === 0)}
                       className="w-full bg-indigo text-paper py-3 text-xs font-bold hover:bg-ink transition-colors disabled:opacity-50 shadow-sm"
                     >
-                      {loadingTest ? "Generating Full Test..." : `🚀 Launch Official ${activePattern.code} Pattern Exam (${activePattern.totalQuestions} Qs)`}
+                      {loadingTest
+                        ? "Generating Pattern Test..."
+                        : fullLengthTopicScope === "selected" && selectedTopicIds.length === 0
+                        ? "Please Select Topics Below First"
+                        : `🚀 Launch Official ${activePattern.code} Pattern Exam (${activePattern.totalQuestions} Qs)`}
                     </button>
                   </div>
 
