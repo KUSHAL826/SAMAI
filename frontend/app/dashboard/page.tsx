@@ -221,6 +221,8 @@ export default function StudentDashboardPage() {
   const [mockSelectedTopics, setMockSelectedTopics] = useState<string[]>([]);
   const [mockDifficulty, setMockDifficulty] = useState<string>("mixed");
 
+  const [customPatterns, setCustomPatterns] = useState<any[]>([]);
+
   // Load student profile & curriculum
   useEffect(() => {
     if (!getToken()) {
@@ -242,26 +244,29 @@ export default function StudentDashboardPage() {
     loadCurriculumData();
   }, [router]);
 
-  // Load Analytics when Analytics tab is opened
+  // Load Analytics when Analytics tab is opened or selected exam changes
   useEffect(() => {
     if (activeTab === "analytics") {
-      fetchAnalyticsData();
+      fetchAnalyticsData(selectedExamId);
     }
-  }, [activeTab]);
+  }, [activeTab, selectedExamId]);
 
   async function loadCurriculumData() {
     try {
-      const [examsList, subjectsList, kbRes] = await Promise.all([
+      const [examsList, subjectsList, kbRes, patternsList] = await Promise.all([
         api.get<ExamType[]>("/api/v1/admin/exam-types"),
         api.get<Subject[]>("/api/v1/admin/subjects"),
         api.get<{ exams: any[] }>("/api/v1/questions/knowledge-base-options").catch(() => ({ exams: [] })),
+        api.get<any[]>("/api/v1/admin/patterns").catch(() => []),
       ]);
       setExams(examsList);
       setSubjects(subjectsList);
       setKnowledgeBaseExams(kbRes.exams || []);
+      setCustomPatterns(patternsList || []);
+
       if (examsList.length > 0) {
-        setSelectedExamId(examsList[0].id);
-        setMockExamId(examsList[0].id);
+        setSelectedExamId((prev) => prev || examsList[0].id);
+        setMockExamId((prev) => (prev === "all" ? prev : examsList[0].id));
       }
 
       const topicsMap: Record<string, Chapter[]> = {};
@@ -282,7 +287,24 @@ export default function StudentDashboardPage() {
   }
 
   const activeExamObj = exams.find((e) => e.id === selectedExamId) || exams[0];
-  const activePattern = getExamPattern(activeExamObj?.code, activeExamObj?.name);
+  const activeCustomPattern = customPatterns.find((p) => p.exam_type_id === selectedExamId);
+
+  const activePattern = (() => {
+    if (activeCustomPattern) {
+      return {
+        name: activeCustomPattern.name || activeExamObj?.name || "Entrance Exam",
+        code: activeExamObj?.code || "EXAM",
+        totalQuestions: activeCustomPattern.total_questions || 45,
+        durationMins: activeCustomPattern.duration_minutes || 60,
+        markingScheme: `${activeCustomPattern.positive_marks >= 0 ? "+" : ""}${activeCustomPattern.positive_marks} Correct, ${activeCustomPattern.negative_marks} Negative Marking`,
+        positiveMarks: activeCustomPattern.positive_marks,
+        negativeMarks: activeCustomPattern.negative_marks,
+        description: "Custom Entrance Examination pattern configured in Knowledge Base.",
+        subjectsHint: Object.keys(activeCustomPattern.questions_per_subject || {}).join(", ") || "Core Syllabus Subjects",
+      };
+    }
+    return getExamPattern(activeExamObj?.code, activeExamObj?.name);
+  })();
 
   // Filter subjects by selected exam section in sidebar
   const examSubjects = selectedExamId
@@ -296,10 +318,14 @@ export default function StudentDashboardPage() {
       ? selectedKnowledgeExam.subjects.flatMap((s: any) => s.chapters || [])
       : knowledgeBaseExams.flatMap((e: any) => (e.subjects || []).flatMap((s: any) => s.chapters || []));
 
-  async function fetchAnalyticsData() {
+  async function fetchAnalyticsData(targetExamId?: string) {
     setLoadingAnalytics(true);
     try {
-      const res = await api.get<AnalyticsData>("/api/v1/student/analytics", true);
+      const examIdToQuery = targetExamId || selectedExamId;
+      const url = examIdToQuery && examIdToQuery !== "all"
+        ? `/api/v1/student/analytics?exam_type_id=${examIdToQuery}`
+        : `/api/v1/student/analytics`;
+      const res = await api.get<AnalyticsData>(url, true);
       setAnalytics(res);
     } catch {
       // Fallback data if no analytics yet
@@ -673,7 +699,34 @@ export default function StudentDashboardPage() {
           </div>
 
           <div className="flex items-center gap-4">
-            <span className="text-xs font-medium text-slate hidden sm:inline-block">
+            {/* Prominent Target Exam Selector */}
+            <div className="flex items-center gap-2 bg-indigo/10 border border-indigo/30 px-3 py-1.5 rounded">
+              <span className="text-xs font-bold text-indigo uppercase flex items-center gap-1">
+                <span>🎓</span> Target Exam:
+              </span>
+              <select
+                value={selectedExamId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setSelectedExamId(id);
+                  setMockExamId(id);
+                  setSelectedTopicIds([]);
+                  setSelectedSubjectIds([]);
+                  if (activeTab === "analytics") {
+                    fetchAnalyticsData(id);
+                  }
+                }}
+                className="bg-white border border-indigo/30 text-ink text-xs font-bold px-2 py-1 focus:outline-none"
+              >
+                {exams.map((ex) => (
+                  <option key={ex.id} value={ex.id}>
+                    {ex.code} — {ex.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <span className="text-xs font-medium text-slate hidden lg:inline-block">
               {student.name} ({student.email})
             </span>
             <button
@@ -1689,17 +1742,42 @@ export default function StudentDashboardPage() {
               <div className="border border-line bg-white p-6 shadow-sm">
                 <div className="border-b border-line pb-6 mb-8 flex flex-wrap items-center justify-between gap-4">
                   <div>
-                    <h1 className="font-serif text-3xl font-bold text-ink">Student Performance & Progress Graph</h1>
+                    <h1 className="font-serif text-3xl font-bold text-ink">
+                      {activeExamObj && selectedExamId !== "all" ? `${activeExamObj.name} (${activeExamObj.code}) Analytics` : "All Exams Student Performance & Progress Graph"}
+                    </h1>
                     <p className="text-slate text-sm mt-1">
-                      Real-time tracking of test attempts, score trajectory over time, subject mastery, and NEET/KCET/JEE exam readiness.
+                      Real-time tracking of test attempts, score trajectory over time, subject mastery, and exam readiness grounded in Knowledge Base.
                     </p>
                   </div>
-                  <button
-                    onClick={fetchAnalyticsData}
-                    className="px-4 py-2 border border-line text-xs font-medium text-slate hover:text-ink"
-                  >
-                    🔄 Refresh Analytics
-                  </button>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 bg-indigo/10 border border-indigo/30 px-3 py-2 rounded">
+                      <span className="text-xs font-bold text-indigo uppercase">Filter Exam:</span>
+                      <select
+                        value={selectedExamId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          setSelectedExamId(id);
+                          fetchAnalyticsData(id);
+                        }}
+                        className="bg-white border border-indigo/30 text-ink text-xs font-bold px-2 py-1 focus:outline-none"
+                      >
+                        <option value="all">All Target Exams Combined</option>
+                        {exams.map((ex) => (
+                          <option key={ex.id} value={ex.id}>
+                            {ex.code} — {ex.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <button
+                      onClick={() => fetchAnalyticsData(selectedExamId)}
+                      className="px-4 py-2 border border-line text-xs font-bold text-slate hover:text-ink bg-white shadow-sm"
+                    >
+                      🔄 Refresh
+                    </button>
+                  </div>
                 </div>
 
                 {loadingAnalytics ? (

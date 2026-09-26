@@ -16,20 +16,28 @@ router = APIRouter(prefix="/api/v1/student", tags=["student"])
 
 @router.get("/analytics")
 async def get_student_analytics(
+    exam_type_id: str | None = None,
     current_student: Student = Depends(get_current_student),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Returns comprehensive analytics, score trends, subject mastery,
-    and NEET/KCET/JEE exam readiness tracker for the authenticated student.
+    and exam readiness tracker for the authenticated student, optionally filtered by target exam.
     """
-    # Query all completed exam results for this student
+    # Query completed exam results for this student (filtered by exam_type_id if provided)
     stmt = (
         select(ExamResult, ExamAttempt)
         .join(ExamAttempt, ExamResult.exam_attempt_id == ExamAttempt.id)
         .where(ExamResult.student_id == current_student.id)
-        .order_by(ExamAttempt.started_at.asc())
     )
+    if exam_type_id and exam_type_id != "all":
+        try:
+            target_uuid = uuid.UUID(str(exam_type_id))
+            stmt = stmt.where(ExamAttempt.exam_type_id == target_uuid)
+        except ValueError:
+            pass
+
+    stmt = stmt.order_by(ExamAttempt.started_at.asc())
     res = await db.execute(stmt)
     results = res.all()
 

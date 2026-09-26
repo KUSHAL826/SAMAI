@@ -432,16 +432,22 @@ async def submit_test(
     # Save to PostgreSQL DB if student is authenticated
     if current_student:
         try:
-            # Default exam_type UUID if not passed
-            exam_type_id = payload.get("exam_type_id")
-            if not exam_type_id or not isinstance(exam_type_id, uuid.UUID):
-                dummy_uuid = uuid.uuid4()
-            else:
-                dummy_uuid = exam_type_id
+            from app.db.models.curriculum import ExamType
+            exam_type_raw = payload.get("exam_type_id")
+            exam_uuid = None
+            if exam_type_raw and str(exam_type_raw) != "all":
+                try:
+                    exam_uuid = uuid.UUID(str(exam_type_raw))
+                except ValueError:
+                    exam_uuid = None
+
+            if not exam_uuid:
+                first_ex = await db.execute(select(ExamType.id).limit(1))
+                exam_uuid = first_ex.scalar_one_or_none() or uuid.uuid4()
 
             attempt = ExamAttempt(
                 student_id=current_student.id,
-                exam_type_id=dummy_uuid,
+                exam_type_id=exam_uuid,
                 mode=ExamMode.FULL_LENGTH if payload.get("mode") == "full_length" else ExamMode.TOPIC_WISE,
                 duration_minutes=max(1, round(time_taken / 60)),
                 started_at=datetime.now(timezone.utc),
