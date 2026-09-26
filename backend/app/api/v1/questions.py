@@ -809,16 +809,30 @@ async def submit_test(
     total_attempted = correct_count + incorrect_count
     accuracy = round((correct_count / total_attempted * 100), 2) if total_attempted > 0 else 0.0
 
-    # Categorize strong areas and areas to improve by topic/subject
-    topic_performance: dict[str, dict[str, int]] = {}
+    # Categorize strong areas, weak areas, and per-subject/topic metrics
+    topic_performance: dict[str, dict] = {}
+    subject_performance: dict[str, dict] = {}
     for q in questions:
         t_name = q.get("topic_name") or q.get("subject_name") or "Core Knowledge"
+        s_name = q.get("subject_name") or "General"
+
         if t_name not in topic_performance:
-            topic_performance[t_name] = {"correct": 0, "total": 0}
+            topic_performance[t_name] = {"correct": 0, "total": 0, "subject_name": s_name}
         topic_performance[t_name]["total"] += 1
+
+        if s_name not in subject_performance:
+            subject_performance[s_name] = {"correct": 0, "incorrect": 0, "total": 0, "score": 0.0}
+        subject_performance[s_name]["total"] += 1
+
         user_ans = user_answers.get(str(q.get("id")))
-        if user_ans and user_ans == q.get("correct_answer"):
-            topic_performance[t_name]["correct"] += 1
+        if user_ans:
+            if user_ans == q.get("correct_answer"):
+                topic_performance[t_name]["correct"] += 1
+                subject_performance[s_name]["correct"] += 1
+                subject_performance[s_name]["score"] += pos_marks
+            else:
+                subject_performance[s_name]["incorrect"] += 1
+                subject_performance[s_name]["score"] -= abs(neg_marks)
 
     strong_areas = []
     weak_areas = []
@@ -856,7 +870,12 @@ async def submit_test(
                 started_at=datetime.now(timezone.utc),
                 submitted_at=datetime.now(timezone.utc),
                 status=AttemptStatus.SUBMITTED,
-                config_snapshot={"title": payload.get("test_title", "CBT Practice Test"), "total_questions": len(questions)},
+                config_snapshot={
+                    "title": payload.get("test_title", "CBT Practice Test"),
+                    "total_questions": len(questions),
+                    "topic_performance": topic_performance,
+                    "subject_performance": subject_performance,
+                },
                 live_state=user_answers,
             )
             db.add(attempt)

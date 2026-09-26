@@ -73,8 +73,18 @@ type AnalyticsData = {
   subject_breakdown: Array<{
     subject_name: string;
     tests_taken: number;
+    total_questions?: number;
     accuracy: number;
     avg_score: number;
+  }>;
+  topic_breakdown?: Array<{
+    topic_name: string;
+    subject_name: string;
+    attempts_count: number;
+    total_questions: number;
+    correct_count: number;
+    accuracy: number;
+    status: string;
   }>;
   weak_topics: string[];
   strong_topics: string[];
@@ -2658,53 +2668,142 @@ export default function StudentDashboardPage() {
                     </div>
 
                     <div className="grid lg:grid-cols-2 gap-8">
+                      {/* SUBJECT PERFORMANCE & ATTEMPTS COUNT */}
                       <div className="border border-line bg-white p-6 shadow-sm">
-                        <h2 className="font-serif text-xl font-bold text-ink mb-4 pb-2 border-b border-line">
-                          Subject Accuracy & Mastery Meters
-                        </h2>
-                        <div className="space-y-5">
+                        <div className="flex items-center justify-between mb-4 pb-2 border-b border-line">
+                          <h2 className="font-serif text-xl font-bold text-ink">
+                            Subject Progress & Attempt Counts
+                          </h2>
+                          <span className="text-[11px] font-mono text-indigo bg-indigo/10 px-2 py-0.5 rounded font-bold">
+                            Per-Subject Tracking
+                          </span>
+                        </div>
+
+                        <div className="space-y-6">
                           {analytics.subject_breakdown.map((sb) => (
-                            <div key={sb.subject_name}>
-                              <div className="flex justify-between text-xs font-semibold text-ink mb-1.5">
-                                <span>{sb.subject_name}</span>
-                                <span className="text-indigo">{sb.accuracy}% Accuracy</span>
+                            <div key={sb.subject_name} className="p-3.5 border border-line bg-paper/40 rounded space-y-2">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-serif font-bold text-ink text-sm">{sb.subject_name}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="bg-indigo/10 border border-indigo/20 text-indigo font-mono font-bold px-2 py-0.5 rounded text-[10px]">
+                                    {sb.tests_taken} Attempt{sb.tests_taken === 1 ? "" : "s"} Made
+                                  </span>
+                                  <span className="font-bold text-emerald-700 font-mono">
+                                    {sb.accuracy}% Accuracy
+                                  </span>
+                                </div>
                               </div>
-                              <div className="w-full bg-line h-3 rounded-full overflow-hidden">
+
+                              <div className="w-full bg-line h-2.5 rounded-full overflow-hidden">
                                 <div
                                   style={{ width: `${Math.min(100, sb.accuracy)}%` }}
                                   className="bg-indigo h-full transition-all"
                                 ></div>
+                              </div>
+
+                              <div className="flex items-center justify-between text-[11px] text-slate pt-0.5">
+                                <span>Total Questions Attempted: <strong>{sb.total_questions || (sb.tests_taken * 25)} Qs</strong></span>
+                                <span>Avg Score: <strong>{sb.avg_score} pts</strong></span>
                               </div>
                             </div>
                           ))}
                         </div>
                       </div>
 
+                      {/* AI TOPIC RECOMMENDATIONS */}
                       <div className="border border-line bg-white p-6 shadow-sm">
                         <h2 className="font-serif text-xl font-bold text-ink mb-4 pb-2 border-b border-line">
-                          AI Topic Insights & Recommendations
+                          AI Topic Strength & Weakness Summary
                         </h2>
                         <div className="space-y-4 text-xs">
-                          <div className="p-4 bg-amber-50 border border-amber-200">
-                            <strong className="text-amber-900 font-bold block mb-1">⚠️ Focus Areas (Weak Topics):</strong>
-                            <ul className="list-disc pl-4 space-y-1 text-amber-800">
-                              {analytics.weak_topics.map((t) => (
-                                <li key={t}>{t}</li>
-                              ))}
-                            </ul>
+                          <div className="p-4 bg-emerald-50 border border-emerald-200 rounded">
+                            <strong className="text-emerald-950 font-bold block mb-1.5 flex items-center gap-1.5 text-sm">
+                              <span>🌟</span> High Strength Topics (Accuracy ≥ 70%):
+                            </strong>
+                            {analytics.strong_topics && analytics.strong_topics.length > 0 ? (
+                              <ul className="list-disc pl-5 space-y-1 text-emerald-900 font-medium">
+                                {analytics.strong_topics.map((t) => (
+                                  <li key={t}>{t}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-emerald-800 italic">Score 70% or higher in topic practice tests to add strength badges!</p>
+                            )}
                           </div>
 
-                          <div className="p-4 bg-emerald-50 border border-emerald-200">
-                            <strong className="text-emerald-900 font-bold block mb-1">✅ High Mastery Topics:</strong>
-                            <ul className="list-disc pl-4 space-y-1 text-emerald-800">
-                              {analytics.strong_topics.map((t) => (
-                                <li key={t}>{t}</li>
-                              ))}
-                            </ul>
+                          <div className="p-4 bg-amber-50 border border-amber-200 rounded">
+                            <strong className="text-amber-950 font-bold block mb-1.5 flex items-center gap-1.5 text-sm">
+                              <span>⚠️</span> Weak Topics Requiring Focus (Accuracy &lt; 70%):
+                            </strong>
+                            {analytics.weak_topics && analytics.weak_topics.length > 0 ? (
+                              <ul className="list-disc pl-5 space-y-1 text-amber-900 font-medium">
+                                {analytics.weak_topics.map((t) => (
+                                  <li key={t}>{t}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="text-amber-800 italic">Great job! All practiced topics show high accuracy.</p>
+                            )}
                           </div>
                         </div>
                       </div>
                     </div>
+
+                    {/* UPLOADED TOPICS DETAILED BREAKDOWN TABLE */}
+                    {analytics.topic_breakdown && analytics.topic_breakdown.length > 0 && (
+                      <div className="border border-line bg-white p-6 shadow-sm">
+                        <div className="flex items-center justify-between border-b border-line pb-3 mb-4">
+                          <div>
+                            <h2 className="font-serif text-xl font-bold text-ink">
+                              Uploaded Topics Performance & Attempt Breakdown
+                            </h2>
+                            <p className="text-xs text-slate mt-0.5">
+                              Detailed score, accuracy, and attempt logs for every uploaded topic
+                            </p>
+                          </div>
+                          <span className="text-xs font-mono font-bold text-indigo bg-indigo/10 px-2.5 py-1 rounded">
+                            {analytics.topic_breakdown.length} Topics Attempted
+                          </span>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-paper border-b border-line text-slate uppercase font-mono text-[10px]">
+                                <th className="p-3">Topic Name</th>
+                                <th className="p-3">Subject</th>
+                                <th className="p-3 text-center">Number of Attempts</th>
+                                <th className="p-3 text-center">Questions Solved</th>
+                                <th className="p-3 text-center">Score Accuracy %</th>
+                                <th className="p-3 text-center">Area Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-line">
+                              {analytics.topic_breakdown.map((tb, i) => (
+                                <tr key={i} className="hover:bg-slate-50 transition-colors">
+                                  <td className="p-3 font-semibold text-ink">{tb.topic_name}</td>
+                                  <td className="p-3 text-slate font-medium">{tb.subject_name}</td>
+                                  <td className="p-3 text-center font-mono font-bold text-indigo">{tb.attempts_count}</td>
+                                  <td className="p-3 text-center font-mono">{tb.correct_count} / {tb.total_questions}</td>
+                                  <td className="p-3 text-center font-mono font-bold text-emerald-700">{tb.accuracy}%</td>
+                                  <td className="p-3 text-center">
+                                    <span
+                                      className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase font-mono ${
+                                        tb.status === "Strength Area"
+                                          ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                          : "bg-amber-100 text-amber-800 border border-amber-300"
+                                      }`}
+                                    >
+                                      {tb.status === "Strength Area" ? "🟢 Strength Area" : "🟠 Weak Area"}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : null}
               </div>

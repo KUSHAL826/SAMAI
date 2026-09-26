@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_student
 from app.core.config import get_settings
-from app.core.email import send_otp_email
+from app.core.email import send_otp_email, background_send_otp_email
 from app.core.otp import OTPPurpose, generate_and_store_otp, verify_otp
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.models.admin import AdminUser
@@ -87,7 +87,7 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
 
         # Generate and email signup OTP
         otp = await generate_and_store_otp(clean_email, OTPPurpose.SIGNUP, db=db)
-        await send_otp_email(clean_email, otp, "signup verification")
+        background_send_otp_email(clean_email, otp, "signup verification")
 
         return MessageResponse(
             message="Account registration initiated. A 6-digit verification code has been sent to your email."
@@ -127,7 +127,7 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     if not student.is_verified:
         # Trigger OTP resend for unverified account
         otp = await generate_and_store_otp(student.email, OTPPurpose.SIGNUP, db=db)
-        await send_otp_email(student.email, otp, "signup verification")
+        background_send_otp_email(student.email, otp, "signup verification")
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "Email address not verified. A verification OTP has been sent to your email.",
@@ -160,7 +160,7 @@ async def request_login_otp(payload: RequestLoginOTPRequest, db: AsyncSession = 
         await db.commit()
 
     otp = await generate_and_store_otp(clean_email, OTPPurpose.LOGIN, db=db)
-    await send_otp_email(clean_email, otp, "login verification")
+    background_send_otp_email(clean_email, otp, "login verification")
 
     return MessageResponse(
         message=f"A 6-digit login verification OTP code has been dispatched to {clean_email}."
@@ -251,7 +251,7 @@ async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Dep
 
     if student:
         otp = await generate_and_store_otp(clean_email, OTPPurpose.RESET_PASSWORD, db=db)
-        await send_otp_email(clean_email, otp, "password reset")
+        background_send_otp_email(clean_email, otp, "password reset")
 
     # Generic response to prevent email enumeration
     return MessageResponse(
@@ -294,7 +294,7 @@ async def resend_otp(payload: ResendOTPRequest, db: AsyncSession = Depends(get_d
         purpose_enum = OTPPurpose.SIGNUP
 
     otp = await generate_and_store_otp(clean_email, purpose_enum, db=db)
-    await send_otp_email(clean_email, otp, f"{purpose_enum.value} verification code")
+    background_send_otp_email(clean_email, otp, f"{purpose_enum.value} verification code")
 
     return MessageResponse(message="A new 6-digit code has been sent to your email.")
 
