@@ -27,6 +27,10 @@ class AdminLoginRequest(BaseModel):
     password: str = Field(min_length=4, max_length=128)
 
 
+class RequestLoginOTPRequest(BaseModel):
+    email: EmailStr
+
+
 class VerifyLoginOTPRequest(BaseModel):
     email: EmailStr
     otp: str = Field(min_length=4, max_length=10)

@@ -10,6 +10,7 @@ Auth flow (spec section 2) -- Production Ready Student & Admin Authentication:
     POST /forgot-password       -> emails reset OTP with generic response
     POST /reset-password        -> verifies reset OTP and updates password
 """
+import secrets
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, func, or_
@@ -29,10 +30,12 @@ from app.schemas.auth import (
     LoginRequest,
     MessageResponse,
     RegisterRequest,
+    RequestLoginOTPRequest,
     ResendOTPRequest,
     ResetPasswordRequest,
     StudentOut,
     TokenResponse,
+    VerifyLoginOTPRequest,
     VerifySignupOTPRequest,
 )
 
@@ -130,6 +133,53 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
             "Email address not verified. A verification OTP has been sent to your email.",
         )
 
+    student.last_login = datetime.now(timezone.utc)
+    await db.commit()
+
+    token = create_access_token(subject=str(student.id), role=student.role)
+    return TokenResponse(access_token=token)
+
+
+@router.post("/request-login-otp", response_model=MessageResponse)
+async def request_login_otp(payload: RequestLoginOTPRequest, db: AsyncSession = Depends(get_db)):
+    clean_email = payload.email.lower().strip()
+    result = await db.execute(select(Student).where(Student.email == clean_email))
+    student = result.scalar_one_or_none()
+
+    if not student:
+        # Create student record if not registered
+        student = Student(
+            name=clean_email.split("@")[0].capitalize(),
+            email=clean_email,
+            mobile="0000000000",
+            password_hash=hash_password(secrets.token_urlsafe(12)),
+            is_verified=False,
+            role="student",
+        )
+        db.add(student)
+        await db.commit()
+
+    otp = await generate_and_store_otp(clean_email, OTPPurpose.LOGIN, db=db)
+    background_send_otp_email(clean_email, otp, "login verification")
+
+    return MessageResponse(
+        message=f"A 6-digit login verification OTP code has been dispatched to {clean_email}."
+    )
+
+
+@router.post("/verify-login-otp", response_model=TokenResponse)
+async def verify_login_otp(payload: VerifyLoginOTPRequest, db: AsyncSession = Depends(get_db)):
+    clean_email = payload.email.lower().strip()
+    ok = await verify_otp(clean_email, OTPPurpose.LOGIN, payload.otp, db=db)
+    if not ok:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid or expired verification code.")
+
+    result = await db.execute(select(Student).where(Student.email == clean_email))
+    student = result.scalar_one_or_none()
+    if not student:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Student account not found.")
+
+    student.is_verified = True
     student.last_login = datetime.now(timezone.utc)
     await db.commit()
 
