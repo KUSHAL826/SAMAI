@@ -231,36 +231,54 @@ async def create_mock_test(
     topic_name = data.get("topic_name")
     difficulty = data.get("difficulty", "mixed")
 
-    if data.get("topic_id"):
-        topic_ids.append(data["topic_id"])
+    # Safe UUID Parsing (filters out "all", empty strings, or invalid UUIDs)
+    valid_exam_uuid = None
+    if exam_type_id and str(exam_type_id) != "all":
+        try:
+            valid_exam_uuid = uuid.UUID(str(exam_type_id))
+        except (ValueError, TypeError):
+            pass
+
+    valid_topic_uuids = []
+    if topic_ids:
+        raw_t_list = topic_ids if isinstance(topic_ids, list) else [topic_ids]
+        for t in raw_t_list:
+            if t and str(t) != "all":
+                try:
+                    valid_topic_uuids.append(uuid.UUID(str(t)))
+                except (ValueError, TypeError):
+                    pass
+
+    valid_subj_uuids = []
+    if subject_ids:
+        raw_s_list = subject_ids if isinstance(subject_ids, list) else [subject_ids]
+        for s in raw_s_list:
+            if s and str(s) != "all":
+                try:
+                    valid_subj_uuids.append(uuid.UUID(str(s)))
+                except (ValueError, TypeError):
+                    pass
 
     # If topic_name passed without IDs, search Topic table
-    if topic_name and not topic_ids:
+    if topic_name and not valid_topic_uuids:
         from sqlalchemy import func
         t_res = await db.execute(select(Topic).where(func.lower(Topic.name).like(f"%{topic_name.strip().lower()}%")))
         matching_topics = t_res.scalars().all()
         if matching_topics:
-            topic_ids.extend([str(t.id) for t in matching_topics])
+            valid_topic_uuids.extend([t.id for t in matching_topics])
 
     questions_out = []
 
     # 1. Fetch existing active QuestionBank items matching filters
     query = select(QuestionBank).where(QuestionBank.is_active.is_(True))
 
-    if exam_type_id and str(exam_type_id) != "all":
-        try:
-            query = query.where(QuestionBank.exam_type_id == uuid.UUID(str(exam_type_id)))
-        except ValueError:
-            pass
+    if valid_exam_uuid:
+        query = query.where(QuestionBank.exam_type_id == valid_exam_uuid)
 
-    if topic_ids and len(topic_ids) > 0:
-        topic_uuids = [uuid.UUID(str(t)) for t in topic_ids if t]
-        if topic_uuids:
-            query = query.where(QuestionBank.topic_id.in_(topic_uuids))
-    elif subject_ids and len(subject_ids) > 0:
-        subj_uuids = [uuid.UUID(str(s)) for s in subject_ids if s]
-        if subj_uuids:
-            query = query.where(QuestionBank.subject_id.in_(subj_uuids))
+    if valid_topic_uuids:
+        query = query.where(QuestionBank.topic_id.in_(valid_topic_uuids))
+    elif valid_subj_uuids:
+        query = query.where(QuestionBank.subject_id.in_(valid_subj_uuids))
 
     if difficulty and difficulty != "mixed":
         try:
@@ -287,11 +305,8 @@ async def create_mock_test(
     # If topic filter returned no questions, fallback to any active QuestionBank questions for this exam
     if len(questions_out) == 0:
         fallback_qb_query = select(QuestionBank).where(QuestionBank.is_active.is_(True))
-        if exam_type_id and str(exam_type_id) != "all":
-            try:
-                fallback_qb_query = fallback_qb_query.where(QuestionBank.exam_type_id == uuid.UUID(str(exam_type_id)))
-            except ValueError:
-                pass
+        if valid_exam_uuid:
+            fallback_qb_query = fallback_qb_query.where(QuestionBank.exam_type_id == valid_exam_uuid)
         fallback_qb_res = await db.execute(fallback_qb_query)
         fallback_questions = fallback_qb_res.scalars().all()
         for q in fallback_questions:
@@ -320,27 +335,28 @@ async def create_mock_test(
             except Exception as e:
                 print(f"[ON-THE-FLY INDEXING NOTICE] {e}")
 
-    # Check if Knowledge Base contains uploaded syllabus content for this topic / exam
+    # Check if Knowledge Base contains uploaded syllabus content for this topic / exam / subject
     has_topic_chunks = False
-    if topic_ids and len(topic_ids) > 0:
-        topic_uuids = [uuid.UUID(str(t)) for t in topic_ids if t]
-        if topic_uuids:
-            chunk_cnt = await db.execute(
-                select(func.count(DocumentChunk.id)).where(DocumentChunk.topic_id.in_(topic_uuids))
-            )
-            if chunk_cnt.scalar_one() > 0:
-                has_topic_chunks = True
+    if valid_topic_uuids:
+        chunk_cnt = await db.execute(
+            select(func.count(DocumentChunk.id)).where(DocumentChunk.topic_id.in_(valid_topic_uuids))
+        )
+        if chunk_cnt.scalar_one() > 0:
+            has_topic_chunks = True
 
-    if not has_topic_chunks and exam_type_id and str(exam_type_id) != "all":
-        try:
-            ex_uuid = uuid.UUID(str(exam_type_id))
-            chunk_cnt = await db.execute(
-                select(func.count(DocumentChunk.id)).where(DocumentChunk.exam_type_id == ex_uuid)
-            )
-            if chunk_cnt.scalar_one() > 0:
-                has_topic_chunks = True
-        except ValueError:
-            pass
+    if not has_topic_chunks and valid_subj_uuids:
+        chunk_cnt = await db.execute(
+            select(func.count(DocumentChunk.id)).where(DocumentChunk.subject_id.in_(valid_subj_uuids))
+        )
+        if chunk_cnt.scalar_one() > 0:
+            has_topic_chunks = True
+
+    if not has_topic_chunks and valid_exam_uuid:
+        chunk_cnt = await db.execute(
+            select(func.count(DocumentChunk.id)).where(DocumentChunk.exam_type_id == valid_exam_uuid)
+        )
+        if chunk_cnt.scalar_one() > 0:
+            has_topic_chunks = True
 
     if not has_topic_chunks:
         global_chunk_cnt = await db.execute(select(func.count(DocumentChunk.id)))
@@ -350,16 +366,13 @@ async def create_mock_test(
     # 2. RAG Extraction from Admin Uploaded Textbooks & PYQs
     if needed > 0:
         chunk_query = select(DocumentChunk.content)
-        if exam_type_id and str(exam_type_id) != "all":
-            try:
-                chunk_query = chunk_query.where(DocumentChunk.exam_type_id == uuid.UUID(str(exam_type_id)))
-            except ValueError:
-                pass
+        if valid_exam_uuid:
+            chunk_query = chunk_query.where(DocumentChunk.exam_type_id == valid_exam_uuid)
 
-        if topic_ids and len(topic_ids) > 0:
-            topic_uuids = [uuid.UUID(str(t)) for t in topic_ids if t]
-            if topic_uuids:
-                chunk_query = chunk_query.where(DocumentChunk.topic_id.in_(topic_uuids))
+        if valid_topic_uuids:
+            chunk_query = chunk_query.where(DocumentChunk.topic_id.in_(valid_topic_uuids))
+        elif valid_subj_uuids:
+            chunk_query = chunk_query.where(DocumentChunk.subject_id.in_(valid_subj_uuids))
 
         chunk_res = await db.execute(chunk_query.limit(10))
         chunks_text = [row[0] for row in chunk_res.all()]
@@ -389,8 +402,8 @@ async def create_mock_test(
                         "question_text": raw.question,
                         "options": raw.options,
                         "difficulty": diff_val,
-                        "topic_id": str(topic_ids[0]) if topic_ids else None,
-                        "subject_id": str(subject_ids[0]) if subject_ids else None,
+                        "topic_id": str(valid_topic_uuids[0]) if valid_topic_uuids else None,
+                        "subject_id": str(valid_subj_uuids[0]) if valid_subj_uuids else None,
                         "correct_answer": raw.correct_answer,
                         "explanation": raw.explanation,
                     })
@@ -403,7 +416,7 @@ async def create_mock_test(
 
                         qb_row = QuestionBank(
                             id=uuid.UUID(q_id),
-                            exam_type_id=uuid.UUID(str(exam_type_id)) if exam_type_id and str(exam_type_id) != "all" else None,
+                            exam_type_id=valid_exam_uuid,
                             question_text=raw.question,
                             options=raw.options,
                             correct_answer=raw.correct_answer,
@@ -435,8 +448,8 @@ async def create_mock_test(
                     "D": f"Principle D: None of the above statements apply."
                 },
                 "difficulty": difficulty if difficulty != "mixed" else "moderate",
-                "topic_id": str(topic_ids[0]) if topic_ids else None,
-                "subject_id": str(subject_ids[0]) if subject_ids else None,
+                "topic_id": str(valid_topic_uuids[0]) if valid_topic_uuids else None,
+                "subject_id": str(valid_subj_uuids[0]) if valid_subj_uuids else None,
                 "correct_answer": "A",
                 "explanation": f"Based on reference syllabus textbooks for {target_tname}, Option A correctly formulates the foundational principle and governing mathematical relation."
             })

@@ -222,6 +222,7 @@ export default function StudentDashboardPage() {
   const [knowledgeBaseExams, setKnowledgeBaseExams] = useState<any[]>([]);
   const [mockExamId, setMockExamId] = useState<string>("all");
   const [mockSubjectId, setMockSubjectId] = useState<string>("all");
+  const [mockSelectedSubjectIds, setMockSelectedSubjectIds] = useState<string[]>([]);
   const [mockTopicScope, setMockTopicScope] = useState<"all" | "selected">("all");
   const [mockSelectedTopics, setMockSelectedTopics] = useState<string[]>([]);
   const [mockDifficulty, setMockDifficulty] = useState<string>("mixed");
@@ -524,7 +525,7 @@ export default function StudentDashboardPage() {
         title: mockPaperTitle,
         question_count: mockPaperCount,
         exam_type_id: mockExamId !== "all" ? mockExamId : undefined,
-        subject_ids: mockSubjectId !== "all" ? [mockSubjectId] : [],
+        subject_ids: mockSelectedSubjectIds.length > 0 ? mockSelectedSubjectIds : (mockSubjectId !== "all" ? [mockSubjectId] : []),
         exam_code: selectedExamObj ? selectedExamObj.code : activePattern.code,
         topic_ids: mockTopicScope === "selected" ? mockSelectedTopics : [],
         difficulty: mockDifficulty,
@@ -1733,32 +1734,57 @@ export default function StudentDashboardPage() {
                     </select>
                   </div>
 
-                  {/* STEP 2: SELECT SUBJECT (FILTERED TO TARGET EXAM) */}
+                  {/* STEP 2: SELECT SUBJECT(S) (SINGLE OR MULTIPLE) */}
                   <div>
-                    <label className="text-xs font-bold text-ink uppercase block mb-1">
-                      Step 2: Select Subject Dropdown (Filtered to Selected Exam) *
-                    </label>
-                    <select
-                      value={mockSubjectId}
-                      onChange={(e) => {
-                        setMockSubjectId(e.target.value);
-                        setMockSelectedTopics([]);
-                      }}
-                      className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none font-semibold"
-                    >
-                      <option value="all">-- All Subjects for Selected Exam --</option>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-ink uppercase block">
+                        Step 2: Select Subject(s) (Single or Multiple Subjects) *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMockSelectedSubjectIds([]);
+                          setMockSubjectId("all");
+                        }}
+                        className="text-xs text-indigo hover:underline font-bold"
+                      >
+                        Select All Subjects ({mockSelectedSubjectIds.length === 0 ? "Default" : "Reset"})
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                       {(mockExamId !== "all"
                         ? subjects.filter((s) => s.exam_type_id === mockExamId)
                         : subjects
                       ).map((s) => {
+                        const isChecked = mockSelectedSubjectIds.includes(s.id);
                         const subExam = exams.find((ex) => ex.id === s.exam_type_id);
                         return (
-                          <option key={s.id} value={s.id}>
-                            [{subExam?.code || "EXAM"}] {s.name}
-                          </option>
+                          <label
+                            key={s.id}
+                            className={`p-3 border text-xs flex items-center justify-between cursor-pointer transition-all ${
+                              isChecked
+                                ? "border-indigo bg-indigo/10 text-indigo font-bold shadow-sm ring-1 ring-indigo"
+                                : "border-line bg-white text-slate hover:border-ink"
+                            }`}
+                          >
+                            <span className="truncate pr-1">[{subExam?.code || "EXAM"}] {s.name}</span>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                setMockSelectedSubjectIds((prev) =>
+                                  prev.includes(s.id)
+                                    ? prev.filter((id) => id !== s.id)
+                                    : [...prev, s.id]
+                                );
+                              }}
+                              className="w-4 h-4 accent-indigo cursor-pointer shrink-0"
+                            />
+                          </label>
                         );
                       })}
-                    </select>
+                    </div>
                   </div>
 
                   {/* STEP 3: SELECT TOPICS / CHAPTERS */}
