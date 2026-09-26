@@ -581,18 +581,56 @@ export default function AdminKnowledgeBasePage() {
         {/* TAB 1: ADD SUBJECTS & TOPICS */}
         {activeTab === "curriculum" ? (
           <div className="space-y-8">
-            <div className="grid md:grid-cols-3 gap-6">
+            {/* Quick Target Exam Creator & 3-Step Curriculum Workflow */}
+            <div className="grid md:grid-cols-4 gap-4">
+              {/* Form 0: Add Target Exam */}
+              <form onSubmit={handleAddExamType} className="border border-indigo/30 bg-indigo/5 p-4 shadow-sm space-y-3">
+                <h2 className="font-serif font-bold text-sm text-indigo border-b border-indigo/20 pb-1.5 flex items-center gap-1.5">
+                  <span>🎓</span> Step 0: Add Target Exam
+                </h2>
+                <div>
+                  <label className="block text-[10px] font-bold text-ink uppercase mb-0.5">Exam Code *</label>
+                  <input
+                    type="text"
+                    value={newExamCode}
+                    onChange={(e) => setNewExamCode(e.target.value)}
+                    placeholder="e.g. GATE, UPSC, CET"
+                    className="w-full border border-line bg-white px-2.5 py-1.5 text-xs text-ink focus:outline-none uppercase font-bold"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-ink uppercase mb-0.5">Exam Name *</label>
+                  <input
+                    type="text"
+                    value={newExamName}
+                    onChange={(e) => setNewExamName(e.target.value)}
+                    placeholder="e.g. Graduate Aptitude Test"
+                    className="w-full border border-line bg-white px-2.5 py-1.5 text-xs text-ink focus:outline-none"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={addingExam || !newExamCode.trim() || !newExamName.trim()}
+                  className="w-full bg-indigo text-paper py-1.5 text-xs font-bold hover:bg-ink transition-colors disabled:opacity-50"
+                >
+                  {addingExam ? "Adding..." : "➕ Add Target Exam"}
+                </button>
+              </form>
+
               {/* Form 1: Add Subject */}
-              <form onSubmit={handleAddSubject} className="border border-line bg-paper p-5 shadow-sm space-y-4">
-                <h2 className="font-serif font-bold text-base text-ink border-b border-line pb-2 flex items-center gap-2">
+              <form onSubmit={handleAddSubject} className="border border-line bg-paper p-4 shadow-sm space-y-3">
+                <h2 className="font-serif font-bold text-sm text-ink border-b border-line pb-1.5 flex items-center gap-1.5">
                   <span>📘</span> Step 1: Add Subject
                 </h2>
                 <div>
-                  <label className="block text-xs font-bold text-ink uppercase mb-1">Target Exam</label>
+                  <label className="block text-[10px] font-bold text-ink uppercase mb-0.5">Target Exam *</label>
                   <select
                     value={newSubjectExamId}
                     onChange={(e) => setNewSubjectExamId(e.target.value)}
-                    className="w-full border border-line bg-white px-3 py-2 text-xs text-ink focus:outline-none"
+                    className="w-full border border-line bg-white px-2.5 py-1.5 text-xs text-ink focus:outline-none font-medium"
+                    required
                   >
                     {examTypes.map((ex) => (
                       <option key={ex.id} value={ex.id}>{ex.code} — {ex.name}</option>
@@ -600,35 +638,37 @@ export default function AdminKnowledgeBasePage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-ink uppercase mb-1">Subject Name</label>
+                  <label className="block text-[10px] font-bold text-ink uppercase mb-0.5">Subject Name *</label>
                   <input
                     type="text"
                     value={newSubjectName}
                     onChange={(e) => setNewSubjectName(e.target.value)}
                     placeholder="e.g. Physics, Organic Chemistry"
-                    className="w-full border border-line bg-white px-3 py-2 text-xs text-ink focus:outline-none"
+                    className="w-full border border-line bg-white px-2.5 py-1.5 text-xs text-ink focus:outline-none"
+                    required
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={addingSubject || !newSubjectName.trim()}
-                  className="w-full bg-indigo text-paper py-2 text-xs font-bold hover:bg-ink transition-colors disabled:opacity-50"
+                  className="w-full bg-indigo text-paper py-1.5 text-xs font-bold hover:bg-ink transition-colors disabled:opacity-50"
                 >
                   {addingSubject ? "Adding..." : "➕ Add Subject"}
                 </button>
               </form>
 
               {/* Form 2: Add Chapter */}
-              <form onSubmit={handleAddChapter} className="border border-line bg-paper p-5 shadow-sm space-y-4">
-                <h2 className="font-serif font-bold text-base text-ink border-b border-line pb-2 flex items-center gap-2">
+              <form onSubmit={handleAddChapter} className="border border-line bg-paper p-4 shadow-sm space-y-3">
+                <h2 className="font-serif font-bold text-sm text-ink border-b border-line pb-1.5 flex items-center gap-1.5">
                   <span>📖</span> Step 2: Add Chapter
                 </h2>
                 <div>
-                  <label className="block text-xs font-bold text-ink uppercase mb-1">Select Subject</label>
+                  <label className="block text-[10px] font-bold text-ink uppercase mb-0.5">Select Subject *</label>
                   <select
                     value={newChapterSubjectId}
                     onChange={(e) => setNewChapterSubjectId(e.target.value)}
-                    className="w-full border border-line bg-white px-3 py-2 text-xs text-ink focus:outline-none"
+                    className="w-full border border-line bg-white px-2.5 py-1.5 text-xs text-ink focus:outline-none font-medium"
+                    required
                   >
                     {subjects.map((sub) => (
                       <option key={sub.id} value={sub.id}>{sub.name}</option>
@@ -636,35 +676,37 @@ export default function AdminKnowledgeBasePage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-ink uppercase mb-1">Chapter Name</label>
+                  <label className="block text-[10px] font-bold text-ink uppercase mb-0.5">Chapter Name *</label>
                   <input
                     type="text"
                     value={newChapterName}
                     onChange={(e) => setNewChapterName(e.target.value)}
                     placeholder="e.g. Kinematics & Mechanics"
-                    className="w-full border border-line bg-white px-3 py-2 text-xs text-ink focus:outline-none"
+                    className="w-full border border-line bg-white px-2.5 py-1.5 text-xs text-ink focus:outline-none"
+                    required
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={addingChapter || !newChapterName.trim()}
-                  className="w-full bg-indigo text-paper py-2 text-xs font-bold hover:bg-ink transition-colors disabled:opacity-50"
+                  className="w-full bg-indigo text-paper py-1.5 text-xs font-bold hover:bg-ink transition-colors disabled:opacity-50"
                 >
                   {addingChapter ? "Adding..." : "➕ Add Chapter"}
                 </button>
               </form>
 
               {/* Form 3: Add Topic */}
-              <form onSubmit={handleAddTopic} className="border border-line bg-paper p-5 shadow-sm space-y-4">
-                <h2 className="font-serif font-bold text-base text-ink border-b border-line pb-2 flex items-center gap-2">
+              <form onSubmit={handleAddTopic} className="border border-line bg-paper p-4 shadow-sm space-y-3">
+                <h2 className="font-serif font-bold text-sm text-ink border-b border-line pb-1.5 flex items-center gap-1.5">
                   <span>🎯</span> Step 3: Add Topic Name
                 </h2>
                 <div>
-                  <label className="block text-xs font-bold text-ink uppercase mb-1">Select Chapter</label>
+                  <label className="block text-[10px] font-bold text-ink uppercase mb-0.5">Select Chapter *</label>
                   <select
                     value={newTopicChapterId}
                     onChange={(e) => setNewTopicChapterId(e.target.value)}
-                    className="w-full border border-line bg-white px-3 py-2 text-xs text-ink focus:outline-none"
+                    className="w-full border border-line bg-white px-2.5 py-1.5 text-xs text-ink focus:outline-none font-medium"
+                    required
                   >
                     {chapters.length === 0 ? (
                       <option value="">No chapters available. Create chapter first.</option>
@@ -676,29 +718,33 @@ export default function AdminKnowledgeBasePage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-ink uppercase mb-1">Topic Name</label>
+                  <label className="block text-[10px] font-bold text-ink uppercase mb-0.5">Topic Name *</label>
                   <input
                     type="text"
                     value={newTopicName}
                     onChange={(e) => setNewTopicName(e.target.value)}
                     placeholder="e.g. Motion in One Dimension"
-                    className="w-full border border-indigo/40 bg-indigo/5 px-3 py-2 text-xs text-ink focus:outline-none font-medium"
+                    className="w-full border border-emerald-600/40 bg-emerald-50 px-2.5 py-1.5 text-xs text-ink focus:outline-none font-medium"
+                    required
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={addingTopic || !newTopicName.trim() || !newTopicChapterId}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-paper py-2 text-xs font-bold transition-colors disabled:opacity-50"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-paper py-1.5 text-xs font-bold transition-colors disabled:opacity-50"
                 >
-                  {addingTopic ? "Adding..." : "⚡ Add Topic (Enables Topic Exams)"}
+                  {addingTopic ? "Adding..." : "⚡ Add Topic (Enables Exams)"}
                 </button>
               </form>
             </div>
 
             {/* CURRICULUM TREE PREVIEW */}
             <div className="border border-line bg-white p-6 shadow-sm">
-              <h2 className="font-serif font-bold text-xl text-ink mb-4 pb-2 border-b border-line">
-                Knowledge Base Curriculum Tree Structure
+              <h2 className="font-serif font-bold text-xl text-ink mb-4 pb-2 border-b border-line flex items-center justify-between">
+                <span>Knowledge Base Curriculum Tree Structure</span>
+                <span className="text-xs font-sans font-normal text-slate">
+                  {subjects.length} Subjects | {chapters.length} Chapters | {topics.length} Topics Total
+                </span>
               </h2>
               <div className="space-y-6">
                 {subjects.map((s) => {
@@ -707,7 +753,7 @@ export default function AdminKnowledgeBasePage() {
                     <div key={s.id} className="p-4 border border-line bg-paper">
                       <div className="flex items-center justify-between mb-3">
                         <strong className="font-serif text-lg text-ink">
-                          {s.name} <span className="text-xs font-mono text-indigo font-normal">[{subExam?.code || "NEET/KCET/JEE"}]</span>
+                          {s.name} <span className="text-xs font-mono text-indigo font-normal">[{subExam?.code || "ALL EXAMS"}]</span>
                         </strong>
                       </div>
 
@@ -740,8 +786,9 @@ export default function AdminKnowledgeBasePage() {
             <form onSubmit={handleUploadCourseContent} className="space-y-8">
               {/* 1. Target Exam & Scope */}
               <section className="border border-line bg-paper p-6 sm:p-8 shadow-sm space-y-6">
-                <h2 className="text-lg font-bold font-serif text-ink border-b border-line pb-2">
-                  1. Select Material Scope & Assignment
+                <h2 className="text-lg font-bold font-serif text-ink border-b border-line pb-2 flex items-center justify-between">
+                  <span>1. Select Material Scope & Assignment</span>
+                  <span className="text-xs font-sans text-amber font-semibold">* All Fields Are Mandatory</span>
                 </h2>
 
                 <div className="grid sm:grid-cols-3 gap-4">
@@ -790,7 +837,9 @@ export default function AdminKnowledgeBasePage() {
 
                 {/* Target Exams */}
                 <div>
-                  <label className="block text-xs font-bold text-ink uppercase mb-2">Target Exam(s)</label>
+                  <label className="block text-xs font-bold text-ink uppercase mb-2">
+                    Target Exam(s) <span className="text-red-600 font-bold">* Mandatory</span>
+                  </label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {examTypes.map((exam) => {
                       const isChecked = selectedExamIds.includes(exam.id);
@@ -814,7 +863,9 @@ export default function AdminKnowledgeBasePage() {
                 {materialScope !== "whole_exam" && (
                   <div className="space-y-4 pt-4 border-t border-line">
                     <div>
-                      <label className="block text-xs font-bold text-ink uppercase mb-2">Select Subject</label>
+                      <label className="block text-xs font-bold text-ink uppercase mb-2">
+                        Select Subject <span className="text-red-600 font-bold">* Mandatory</span>
+                      </label>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                         {subjects.map((sub) => {
                           const isSelected = sub.id === selectedSubjectId;
@@ -847,21 +898,50 @@ export default function AdminKnowledgeBasePage() {
                       />
                     </div>
 
-                    {/* Dedicated Topic Name Input */}
+                    {/* Topic Name Select Dropdown (Mandatory) */}
                     <div className="grid sm:grid-cols-2 gap-4 pt-3 border-t border-line">
                       <div>
                         <label className="block text-xs font-bold text-ink uppercase mb-1">
-                          Topic Name (For Topic-Wise Exam Generation)
+                          Select Topic Name <span className="text-red-600 font-bold">* Mandatory</span>
                         </label>
-                        <input
-                          type="text"
-                          value={contentTopicName}
-                          onChange={(e) => setContentTopicName(e.target.value)}
-                          placeholder="e.g. Organic Reactions, Thermodynamics, Kinematics..."
-                          className="w-full border border-indigo/40 bg-indigo/5 px-3 py-2 text-sm text-ink focus:outline-none font-medium"
-                        />
-                        <span className="text-[10px] text-slate mt-0.5 block">
-                          ⚡ Entering a topic name auto-provisions this topic in curriculum for student topic-wise exams.
+                        {(() => {
+                          const chapsForSub = chapters.filter((c) => c.subject_id === selectedSubjectId);
+                          const subTopics = topics.filter((t) => chapsForSub.some((c) => c.id === t.chapter_id));
+                          const listToUse = subTopics.length > 0 ? subTopics : topics;
+
+                          return (
+                            <div className="space-y-2">
+                              <select
+                                value={contentTopicName}
+                                onChange={(e) => setContentTopicName(e.target.value)}
+                                className="w-full border border-indigo/50 bg-indigo/5 px-3 py-2.5 text-sm text-ink focus:outline-none font-bold"
+                                required
+                              >
+                                <option value="">-- Select Added Topic from Dropdown --</option>
+                                {listToUse.map((t) => (
+                                  <option key={t.id} value={t.name}>
+                                    🎯 {t.name}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <div className="pt-1">
+                                <label className="block text-[11px] text-slate font-medium mb-0.5">
+                                  Or type custom topic name if not listed above:
+                                </label>
+                                <input
+                                  type="text"
+                                  value={contentTopicName}
+                                  onChange={(e) => setContentTopicName(e.target.value)}
+                                  placeholder="e.g. Organic Reactions, Kinematics..."
+                                  className="w-full border border-line bg-white px-3 py-1.5 text-xs text-ink focus:outline-none"
+                                />
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        <span className="text-[10px] text-slate mt-1 block">
+                          ⚡ Selection binds uploaded textbooks & PYQs to this topic for student topic-wise exams.
                         </span>
                       </div>
                       <div>
@@ -873,7 +953,7 @@ export default function AdminKnowledgeBasePage() {
                           value={contentChapterName}
                           onChange={(e) => setContentChapterName(e.target.value)}
                           placeholder="e.g. Unit 1: Physics Fundamentals"
-                          className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
+                          className="w-full border border-line bg-white px-3 py-2.5 text-sm text-ink focus:outline-none"
                         />
                       </div>
                     </div>
@@ -883,15 +963,19 @@ export default function AdminKnowledgeBasePage() {
 
               {/* 2. Choose Document Type & Upload File */}
               <section className="border border-line bg-paper p-6 sm:p-8 shadow-sm space-y-4">
-                <h2 className="text-lg font-bold font-serif text-ink border-b border-line pb-2">
-                  2. Document Category & File Upload
+                <h2 className="text-lg font-bold font-serif text-ink border-b border-line pb-2 flex items-center justify-between">
+                  <span>2. Document Category & File Upload</span>
+                  <span className="text-xs font-sans text-amber font-semibold">* All Fields Are Mandatory</span>
                 </h2>
                 <div>
-                  <label className="block text-xs font-bold text-ink uppercase mb-2">Category</label>
+                  <label className="block text-xs font-bold text-ink uppercase mb-2">
+                    Category <span className="text-red-600 font-bold">* Mandatory</span>
+                  </label>
                   <select
                     value={documentType}
                     onChange={(e) => setDocumentType(e.target.value as any)}
-                    className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none font-semibold"
+                    className="w-full border border-line bg-white px-3 py-2.5 text-sm text-ink focus:outline-none font-semibold"
+                    required
                   >
                     <option value="textbook">Textbook / Complete Study Module</option>
                     <option value="sample_questions">Sample Question Bank / Exercise Sheet</option>
@@ -902,18 +986,27 @@ export default function AdminKnowledgeBasePage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-ink uppercase mb-2">Attach File (.pdf, .docx, .txt)</label>
+                  <label className="block text-xs font-bold text-ink uppercase mb-2">
+                    Attach File (.pdf, .docx, .txt) <span className="text-red-600 font-bold">* Mandatory</span>
+                  </label>
                   <input
                     type="file"
                     accept=".pdf,.doc,.docx,.txt,.csv"
                     onChange={(e) => setCourseFile(e.target.files?.[0] ?? null)}
-                    className="w-full border border-line bg-white p-3 text-sm text-ink"
+                    className="w-full border border-line bg-white p-3 text-sm text-ink font-mono"
+                    required
                   />
                 </div>
 
                 <button
                   type="submit"
-                  disabled={uploading || !courseFile || selectedExamIds.length === 0}
+                  disabled={
+                    uploading ||
+                    !courseFile ||
+                    selectedExamIds.length === 0 ||
+                    (materialScope !== "whole_exam" && !selectedSubjectId && !customSubjectName.trim()) ||
+                    (materialScope === "single_content" && !contentTopicName.trim())
+                  }
                   className="w-full bg-indigo text-paper py-3.5 font-bold text-sm hover:bg-ink transition-colors disabled:opacity-50 shadow"
                 >
                   {uploading
