@@ -18,7 +18,13 @@ from app.db.session import get_db
 from app.schemas.document import DocumentOut, DocumentProcessingStatusOut, DocumentUploadResponse
 from app.workers.document_tasks import process_document
 
-router = APIRouter(prefix="/api/v1/admin/documents", tags=["admin:documents"])
+from app.api.deps import get_current_admin
+
+router = APIRouter(
+    prefix="/api/v1/admin/documents",
+    tags=["admin:documents"],
+    dependencies=[Depends(get_current_admin)],
+)
 
 ALLOWED_EXTENSIONS = {"pdf", "doc", "docx", "txt", "csv", "xls", "xlsx"}
 MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024  # 200MB -- generous for a full textbook
@@ -27,23 +33,29 @@ MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024  # 200MB -- generous for a full textbook
 @router.post("/upload", response_model=DocumentUploadResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     file: UploadFile = File(...),
-    exam_type_id: uuid.UUID = Form(...),
+    exam_type_id: uuid.UUID | None = Form(None),
+    exam_type_ids: str | None = Form(None),
     document_type: DocumentType = Form(...),
     subject_id: uuid.UUID | None = Form(None),
     chapter_id: uuid.UUID | None = Form(None),
     topic_id: uuid.UUID | None = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
-    # --- Validate references exist ---
-    exam_type = await db.get(ExamType, exam_type_id)
-    if not exam_type:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Exam type not found.")
-    if subject_id and not await db.get(Subject, subject_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Subject not found.")
-    if chapter_id and not await db.get(Chapter, chapter_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Chapter not found.")
-    if topic_id and not await db.get(Topic, topic_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Topic not found.")
+    # Parse target exam IDs (single or multiple)
+    target_exam_ids: list[uuid.UUID] = []
+    if exam_type_ids:
+        for raw in exam_type_ids.split(","):
+            raw_clean = raw.strip()
+            if raw_clean:
+                try:
+                    target_exam_ids.append(uuid.UUID(raw_clean))
+                except ValueError:
+                    pass
+    if not target_exam_ids and exam_type_id:
+        target_exam_ids.append(exam_type_id)
+
+    if not target_exam_ids:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "At least one exam type must be selected.")
 
     # --- Validate file type/size ---
     ext = Path(file.filename or "").suffix.lstrip(".").lower()
@@ -59,54 +71,73 @@ async def upload_document(
     if len(file_bytes) == 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Uploaded file is empty.")
 
-    # --- Persist file to object storage (local disk or R2, per STORAGE_PROVIDER) ---
+    # Validate non-exam references
+    if subject_id and not await db.get(Subject, subject_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Subject not found.")
+    if chapter_id and not await db.get(Chapter, chapter_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Chapter not found.")
+    if topic_id and not await db.get(Topic, topic_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Topic not found.")
+
     storage = get_storage()
-    storage_path = storage.save(file_bytes, file.filename, prefix=f"documents/{exam_type.code.lower()}")
+    created_docs = []
+    last_job = None
 
-    # --- Version handling: bump version if this exact combo already has a document ---
-    existing = await db.execute(
-        select(Document).where(
-            Document.exam_type_id == exam_type_id,
-            Document.subject_id == subject_id,
-            Document.chapter_id == chapter_id,
-            Document.topic_id == topic_id,
-            Document.document_type == document_type,
+    for target_exam_id in target_exam_ids:
+        exam_type = await db.get(ExamType, target_exam_id)
+        if not exam_type:
+            continue
+
+        storage_path = storage.save(file_bytes, file.filename, prefix=f"documents/{exam_type.code.lower()}")
+
+        existing = await db.execute(
+            select(Document).where(
+                Document.exam_type_id == target_exam_id,
+                Document.subject_id == subject_id,
+                Document.chapter_id == chapter_id,
+                Document.topic_id == topic_id,
+                Document.document_type == document_type,
+            )
         )
-    )
-    prior = existing.scalars().first()
-    next_version = (prior.version + 1) if prior else 1
+        prior = existing.scalars().first()
+        next_version = (prior.version + 1) if prior else 1
 
-    document = Document(
-        original_filename=file.filename,
-        file_type=ext,
-        mime_type=file.content_type or "application/octet-stream",
-        file_size=len(file_bytes),
-        storage_path=storage_path,
-        exam_type_id=exam_type_id,
-        subject_id=subject_id,
-        chapter_id=chapter_id,
-        topic_id=topic_id,
-        document_type=document_type,
-        version=next_version,
-        status=DocumentStatus.UPLOADED,
-    )
-    db.add(document)
-    await db.commit()
-    await db.refresh(document)
+        document = Document(
+            original_filename=file.filename,
+            file_type=ext,
+            mime_type=file.content_type or "application/octet-stream",
+            file_size=len(file_bytes),
+            storage_path=storage_path,
+            exam_type_id=target_exam_id,
+            subject_id=subject_id,
+            chapter_id=chapter_id,
+            topic_id=topic_id,
+            document_type=document_type,
+            version=next_version,
+            status=DocumentStatus.UPLOADED,
+        )
+        db.add(document)
+        await db.commit()
+        await db.refresh(document)
 
-    job = DocumentProcessingJob(document_id=document.id, status=JobStatus.QUEUED)
-    db.add(job)
-    await db.commit()
-    await db.refresh(job)
+        job = DocumentProcessingJob(document_id=document.id, status=JobStatus.QUEUED)
+        db.add(job)
+        await db.commit()
+        await db.refresh(job)
 
-    # Hand off to the Celery worker -- this call returns immediately.
-    process_document.delay(str(document.id))
+        process_document.delay(str(document.id))
+        created_docs.append(document)
+        last_job = job
 
+    if not created_docs:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Failed to upload document for selected exams.")
+
+    primary_doc = created_docs[0]
     return DocumentUploadResponse(
-        document=DocumentOut.model_validate(document),
-        job_id=job.id,
-        job_status=job.status,
-        message="Upload received. Processing has started in the background.",
+        document=DocumentOut.model_validate(primary_doc),
+        job_id=last_job.id if last_job else primary_doc.id,
+        job_status=last_job.status if last_job else JobStatus.QUEUED,
+        message=f"Upload received for {len(created_docs)} exam(s). Background training has started.",
     )
 
 

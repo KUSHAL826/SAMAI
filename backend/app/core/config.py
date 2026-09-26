@@ -39,8 +39,8 @@ class Settings(BaseSettings):
     R2_ENDPOINT_URL: str = ""
 
     # --- Email / OTP ---
-    MAIL_USERNAME: str = "kushalyngowda136@gmail.com"
-    MAIL_PASSWORD: str = "uzdlhwfmbkchyjnw"
+    MAIL_USERNAME: str = ""
+    MAIL_PASSWORD: str = ""
     MAIL_FROM: str = "kushalyngowda136@gmail.com"
     MAIL_FROM_NAME: str = "SamAI"
     MAIL_SERVER: str = "smtp.gmail.com"
@@ -51,7 +51,11 @@ class Settings(BaseSettings):
     OTP_EXPIRE_SECONDS: int = 300
     OTP_LENGTH: int = 6
     RESEND_API_KEY: str = ""
-    SHOW_OTP_IN_RESPONSE: bool = True
+    SHOW_OTP_IN_RESPONSE: bool = False
+
+    # --- Admin ---
+    ADMIN_ID: str = "samaiadmin@123"
+    ADMIN_PASSWORD: str = ""
 
     # --- App ---
     ENVIRONMENT: str = "development"

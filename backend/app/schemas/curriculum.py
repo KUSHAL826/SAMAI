@@ -16,7 +16,7 @@ class ExamTypeOut(BaseModel):
 
 
 class SubjectCreate(BaseModel):
-    exam_type_id: uuid.UUID
+    exam_type_id: uuid.UUID | None = None
     name: str = Field(min_length=2, max_length=100)
 
 

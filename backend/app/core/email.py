@@ -45,8 +45,9 @@ def _sync_send_gmail_smtp(
 
 async def send_otp_email(to_email: str, otp: str, purpose_label: str) -> None:
     """Delivers OTP email via direct Gmail SMTP using asyncio.to_thread and standard smtplib."""
+    log_otp = otp if settings.ENVIRONMENT == "development" else "******"
     print("\n" + "=" * 50)
-    print(f"[SAMAI OTP CODE] Target: {to_email} | Purpose: {purpose_label} | OTP: {otp}")
+    print(f"[SAMAI EMAIL DISPATCH] Target: {to_email} | Purpose: {purpose_label} | OTP: {log_otp}")
     print("=" * 50 + "\n")
 
     minutes = settings.OTP_EXPIRE_SECONDS // 60

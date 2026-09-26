@@ -68,16 +68,16 @@ export default function LandingPage() {
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <Link
-              href="/register"
-              className="px-6 py-3 bg-indigo text-paper hover:bg-ink transition-colors"
+              href="/signup"
+              className="px-6 py-3 bg-indigo text-paper hover:bg-ink transition-colors font-medium shadow-sm"
             >
               Create a student account
             </Link>
             <Link
-              href="/admin/upload"
-              className="px-6 py-3 border border-ink text-ink hover:bg-ink hover:text-paper transition-colors"
+              href="/login"
+              className="px-6 py-3 border border-ink text-ink hover:bg-ink hover:text-paper transition-colors font-medium"
             >
-              Upload course content
+              Student Portal Login
             </Link>
           </div>
         </div>

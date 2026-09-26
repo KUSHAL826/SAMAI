@@ -4,6 +4,7 @@ Import every model here so that:
   2. Anywhere in the app can `from app.db import models` and get everything.
 """
 from app.db.models.student import Student, StudentSession  # noqa: F401
+from app.db.models.admin import AdminUser  # noqa: F401
 from app.db.models.curriculum import ExamType, Subject, Chapter, Topic  # noqa: F401
 from app.db.models.document import (  # noqa: F401
     Document,

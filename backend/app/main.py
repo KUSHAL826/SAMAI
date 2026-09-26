@@ -7,6 +7,7 @@ from app.api.v1.admin.curriculum import router as admin_curriculum_router
 from app.api.v1.admin.documents import router as admin_documents_router
 from app.api.v1.admin.patterns import router as admin_patterns_router
 from app.api.v1.questions import router as questions_router
+from app.api.v1.student import router as student_router
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -19,7 +20,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https?://.*",
+    allow_origins=settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,6 +39,8 @@ app.include_router(admin_curriculum_router)
 app.include_router(admin_documents_router)
 app.include_router(admin_patterns_router)
 app.include_router(questions_router)
+app.include_router(student_router)
+
 
 
 @app.get("/", tags=["system"])

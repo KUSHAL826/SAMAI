@@ -46,3 +46,34 @@ class QuestionWithAnswerOut(QuestionOut):
 
     correct_answer: str
     explanation: str
+
+
+class MockTestRequest(BaseModel):
+    exam_type_id: uuid.UUID | None = None
+    subject_ids: list[uuid.UUID] = Field(default_factory=list)
+    topic_ids: list[uuid.UUID] = Field(default_factory=list)
+    mode: str = "topic"  # "topic", "multi_topic", "subject", "full_length", "custom"
+    question_count: int = 10
+    difficulty: str = "mixed"
+
+
+class MockTestSubmitRequest(BaseModel):
+    exam_type_id: uuid.UUID | None = None
+    test_title: str = "Mock Test"
+    time_taken_seconds: int = 0
+    user_answers: dict[str, str] = Field(default_factory=dict)
+    questions: list[dict] = Field(default_factory=list)
+
+
+class MockTestResultOut(BaseModel):
+    total_questions: int
+    correct_count: int
+    incorrect_count: int
+    unattempted_count: int
+    score: float
+    max_score: float
+    percentage: float
+    time_taken_seconds: int
+    subject_breakdown: dict
+    solutions: list[dict]
+

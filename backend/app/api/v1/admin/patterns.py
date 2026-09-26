@@ -9,7 +9,13 @@ from app.db.models.pattern import ExamPattern
 from app.db.session import get_db
 from app.schemas.pattern import ExamPatternCreate, ExamPatternOut
 
-router = APIRouter(prefix="/api/v1/admin/patterns", tags=["admin:patterns"])
+from app.api.deps import get_current_admin
+
+router = APIRouter(
+    prefix="/api/v1/admin/patterns",
+    tags=["admin:patterns"],
+    dependencies=[Depends(get_current_admin)],
+)
 
 
 @router.post("", response_model=ExamPatternOut, status_code=status.HTTP_201_CREATED)

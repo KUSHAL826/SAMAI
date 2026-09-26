@@ -17,6 +17,7 @@ class Student(Base, UUIDPKMixin, TimestampMixin):
     mobile: Mapped[str] = mapped_column(String(20), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_verified: Mapped[bool] = mapped_column(default=False)
+    role: Mapped[str] = mapped_column(String(20), default="student")
     last_login: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     otp_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)

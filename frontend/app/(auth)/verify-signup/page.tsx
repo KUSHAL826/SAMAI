@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
+import VerifyEmailPage from "../verify-email/page";
 
-export default function VerifySignupPage() {
-  redirect("/login");
-}
+export default VerifyEmailPage;

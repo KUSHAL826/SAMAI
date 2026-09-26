@@ -25,7 +25,13 @@ from app.schemas.curriculum import (
     TopicOut,
 )
 
-router = APIRouter(prefix="/api/v1/admin", tags=["admin:curriculum"])
+from app.api.deps import get_current_admin
+
+router = APIRouter(
+    prefix="/api/v1/admin",
+    tags=["admin:curriculum"],
+    dependencies=[Depends(get_current_admin)],
+)
 
 
 # ---------- Exam Types ----------
@@ -53,17 +59,29 @@ async def list_exam_types(db: AsyncSession = Depends(get_db)):
 
 @router.post("/subjects", response_model=SubjectOut, status_code=status.HTTP_201_CREATED)
 async def create_subject(payload: SubjectCreate, db: AsyncSession = Depends(get_db)):
-    exam_type = await db.get(ExamType, payload.exam_type_id)
+    exam_type_id = payload.exam_type_id
+    if not exam_type_id:
+        result = await db.execute(select(ExamType).order_by(ExamType.name))
+        first_exam = result.scalars().first()
+        if not first_exam:
+            first_exam = ExamType(code="NEET", name="NEET Exam")
+            db.add(first_exam)
+            await db.commit()
+            await db.refresh(first_exam)
+        exam_type_id = first_exam.id
+
+    exam_type = await db.get(ExamType, exam_type_id)
     if not exam_type:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Exam type not found.")
 
     existing = await db.execute(
-        select(Subject).where(Subject.exam_type_id == payload.exam_type_id, Subject.name == payload.name)
+        select(Subject).where(Subject.exam_type_id == exam_type_id, Subject.name == payload.name)
     )
-    if existing.scalar_one_or_none():
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Subject already exists for this exam.")
+    existing_subj = existing.scalar_one_or_none()
+    if existing_subj:
+        return existing_subj
 
-    subject = Subject(exam_type_id=payload.exam_type_id, name=payload.name)
+    subject = Subject(exam_type_id=exam_type_id, name=payload.name)
     db.add(subject)
     await db.commit()
     await db.refresh(subject)
