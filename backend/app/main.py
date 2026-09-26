@@ -28,11 +28,18 @@ app.add_middleware(
 
 
 
+import os
+
 # Serves locally-stored documents/PDFs when STORAGE_PROVIDER=local.
 # In production (STORAGE_PROVIDER=r2) this is unused -- files are served
 # via presigned R2 URLs instead.
 if settings.STORAGE_PROVIDER == "local":
-    app.mount("/files", StaticFiles(directory=settings.STORAGE_LOCAL_PATH), name="files")
+    upload_dir = settings.STORAGE_LOCAL_PATH
+    if not os.path.isabs(upload_dir):
+        upload_dir = os.path.abspath(upload_dir)
+    os.makedirs(upload_dir, exist_ok=True)
+    app.mount("/files", StaticFiles(directory=upload_dir), name="files")
+
 
 app.include_router(auth_router)
 app.include_router(admin_curriculum_router)

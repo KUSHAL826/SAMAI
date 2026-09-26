@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { api, ApiError, getToken, clearToken } from "@/lib/api";
+import { api, ApiError, getToken, clearToken, isAdminToken } from "@/lib/api";
 
 type ExamType = { id: string; code: string; name: string };
 type Subject = { id: string; exam_type_id: string; name: string };
@@ -78,7 +78,8 @@ export default function AdminKnowledgeBasePage() {
 
   // --- Initial Data Load ---
   async function loadInitialData() {
-    if (!getToken()) {
+    if (!isAdminToken()) {
+      clearToken();
       router.push("/admin/login");
       return;
     }
@@ -107,6 +108,11 @@ export default function AdminKnowledgeBasePage() {
   }
 
   useEffect(() => {
+    if (!isAdminToken()) {
+      clearToken();
+      router.push("/admin/login");
+      return;
+    }
     loadInitialData();
   }, []);
 
