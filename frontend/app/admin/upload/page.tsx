@@ -77,6 +77,10 @@ export default function AdminKnowledgeBasePage() {
   const [newTopicName, setNewTopicName] = useState("");
   const [addingTopic, setAddingTopic] = useState(false);
   const [selectedExamIds, setSelectedExamIds] = useState<string[]>([]);
+  const [materialScope, setMaterialScope] = useState<"whole_exam" | "whole_subject" | "single_content">("whole_subject");
+  const [customSubjectName, setCustomSubjectName] = useState("");
+  const [contentChapterName, setContentChapterName] = useState("");
+  const [contentTopicName, setContentTopicName] = useState("");
   const [contentNameOverride, setContentNameOverride] = useState("");
   const [documentType, setDocumentType] = useState("textbook");
   const [file, setFile] = useState<File | null>(null);
@@ -283,12 +287,12 @@ export default function AdminKnowledgeBasePage() {
     setSuccessMessage(null);
     setStatus(null);
 
-    if (!selectedSubjectId) {
-      setError("Please select or add a subject first.");
+    if (selectedExamIds.length === 0) {
+      setError("Please select at least one target exam.");
       return;
     }
-    if (selectedExamIds.length === 0) {
-      setError("Please select at least one exam.");
+    if (materialScope !== "whole_exam" && !selectedSubjectId && !customSubjectName.trim()) {
+      setError("Please select a subject or enter a new subject name.");
       return;
     }
     if (!file) {
@@ -302,9 +306,18 @@ export default function AdminKnowledgeBasePage() {
       formData.append("file", file);
       formData.append("exam_type_ids", selectedExamIds.join(","));
       formData.append("document_type", documentType);
-      if (selectedSubjectId) formData.append("subject_id", selectedSubjectId);
-      if (selectedChapterId) formData.append("chapter_id", selectedChapterId);
-      if (selectedTopicId) formData.append("topic_id", selectedTopicId);
+      formData.append("material_scope", materialScope);
+
+      if (selectedSubjectId) {
+        formData.append("subject_id", selectedSubjectId);
+      } else if (customSubjectName.trim()) {
+        formData.append("subject_name", customSubjectName.trim());
+      }
+
+      if (materialScope === "single_content") {
+        if (contentChapterName.trim()) formData.append("chapter_name", contentChapterName.trim());
+        if (contentTopicName.trim()) formData.append("topic_name", contentTopicName.trim());
+      }
 
       const res = await api.post<{
         document: { id: string };
@@ -318,12 +331,15 @@ export default function AdminKnowledgeBasePage() {
       });
 
       setSuccessMessage(
-        `Course content uploaded for ${selectedExamIds.length} exam(s)! Knowledge base training in progress.`
+        `Course content uploaded & synced across ${selectedExamIds.length} exam(s)! Knowledge base training in progress.`
       );
 
       pollStatus(res.document.id);
       loadInitialData();
       setFile(null);
+      setCustomSubjectName("");
+      setContentChapterName("");
+      setContentTopicName("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Document upload failed.");
     } finally {
@@ -797,40 +813,183 @@ export default function AdminKnowledgeBasePage() {
           /* TAB 2: COURSE CONTENT / TEXTBOOK UPLOAD */
           <div className="space-y-8">
             <form onSubmit={handleUploadCourseContent} className="space-y-8">
+              {/* 1. Select Material Scope & Target Assignment */}
               <section className="border border-line bg-paper p-6 sm:p-8 shadow-sm">
-                <h2 className="text-lg font-bold font-serif text-ink mb-4 border-b border-line pb-2">1. Select Subject</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                  {subjects.map((sub) => {
-                    const isSelected = sub.id === selectedSubjectId;
-                    return (
-                      <button
-                        key={sub.id}
-                        type="button"
-                        onClick={() => setSelectedSubjectId(sub.id)}
-                        className={`p-3 text-left border text-sm font-medium transition-all ${
-                          isSelected ? "border-indigo bg-indigo/10 text-indigo font-bold" : "border-line bg-paper text-slate"
-                        }`}
-                      >
-                        {sub.name}
-                      </button>
-                    );
-                  })}
+                <h2 className="text-lg font-bold font-serif text-ink mb-2 border-b border-line pb-2">
+                  1. Select Material Scope & Assignment
+                </h2>
+                <p className="text-xs text-slate mb-6">
+                  Choose whether this material belongs to a Whole Exam, a Whole Subject, or a Single Specific Chapter/Topic Content Item.
+                </p>
+
+                <div className="grid sm:grid-cols-3 gap-4 mb-6">
+                  <div
+                    onClick={() => setMaterialScope("whole_exam")}
+                    className={`cursor-pointer p-4 border transition-all ${
+                      materialScope === "whole_exam"
+                        ? "border-indigo bg-indigo/10 text-indigo font-bold ring-1 ring-indigo"
+                        : "border-line bg-white text-slate hover:border-ink"
+                    }`}
+                  >
+                    <span className="text-sm block mb-1">🎓 Whole Exam Package</span>
+                    <span className="text-[11px] font-normal text-slate block leading-relaxed">
+                      Multi-subject complete exam package (NEET / KCET / JEE full syllabus).
+                    </span>
+                  </div>
+
+                  <div
+                    onClick={() => setMaterialScope("whole_subject")}
+                    className={`cursor-pointer p-4 border transition-all ${
+                      materialScope === "whole_subject"
+                        ? "border-indigo bg-indigo/10 text-indigo font-bold ring-1 ring-indigo"
+                        : "border-line bg-white text-slate hover:border-ink"
+                    }`}
+                  >
+                    <span className="text-sm block mb-1">📘 Whole Subject Material</span>
+                    <span className="text-[11px] font-normal text-slate block leading-relaxed">
+                      Entire subject textbook or question bank (e.g. Complete Physics).
+                    </span>
+                  </div>
+
+                  <div
+                    onClick={() => setMaterialScope("single_content")}
+                    className={`cursor-pointer p-4 border transition-all ${
+                      materialScope === "single_content"
+                        ? "border-indigo bg-indigo/10 text-indigo font-bold ring-1 ring-indigo"
+                        : "border-line bg-white text-slate hover:border-ink"
+                    }`}
+                  >
+                    <span className="text-sm block mb-1">🎯 Single Content / Topic Item</span>
+                    <span className="text-[11px] font-normal text-slate block leading-relaxed">
+                      Specific chapter/topic study material (e.g. Motion in 1D, Hydrocarbons).
+                    </span>
+                  </div>
                 </div>
+
+                {/* Target Exams Selection */}
+                <div className="mb-6">
+                  <label className="block text-xs font-bold text-ink uppercase mb-2">Target Exam(s)</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {examTypes.map((exam) => {
+                      const isChecked = selectedExamIds.includes(exam.id);
+                      return (
+                        <div
+                          key={exam.id}
+                          onClick={() => toggleExamSelection(exam.id)}
+                          className={`cursor-pointer p-3 border text-xs flex items-center justify-between transition-all ${
+                            isChecked ? "border-indigo bg-indigo text-paper font-bold" : "border-line bg-white text-ink hover:border-ink"
+                          }`}
+                        >
+                          <span>{exam.code} — {exam.name}</span>
+                          <input type="checkbox" checked={isChecked} onChange={() => {}} className="w-3.5 h-3.5 accent-amber" />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Subject Selector & New Subject Input */}
+                {materialScope !== "whole_exam" && (
+                  <div className="space-y-4 mb-2 pt-4 border-t border-line">
+                    <div>
+                      <label className="block text-xs font-bold text-ink uppercase mb-2">Select or Enter Subject</label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                        {subjects.map((sub) => {
+                          const isSelected = sub.id === selectedSubjectId;
+                          return (
+                            <button
+                              key={sub.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedSubjectId(sub.id);
+                                setCustomSubjectName("");
+                              }}
+                              className={`p-3 text-left border text-sm font-medium transition-all ${
+                                isSelected ? "border-indigo bg-indigo/10 text-indigo font-bold" : "border-line bg-white text-slate hover:border-ink"
+                              }`}
+                            >
+                              {sub.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <input
+                        type="text"
+                        value={customSubjectName}
+                        onChange={(e) => {
+                          setCustomSubjectName(e.target.value);
+                          setSelectedSubjectId("");
+                        }}
+                        placeholder="Or enter new subject name (e.g., Physical Chemistry, Zoology)..."
+                        className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Chapter & Topic inputs if single_content */}
+                    {materialScope === "single_content" && (
+                      <div className="grid sm:grid-cols-2 gap-4 pt-3 border-t border-line">
+                        <div>
+                          <label className="block text-xs font-bold text-ink uppercase mb-1">Chapter Name</label>
+                          <input
+                            type="text"
+                            value={contentChapterName}
+                            onChange={(e) => setContentChapterName(e.target.value)}
+                            placeholder="e.g. Kinematics & Mechanics"
+                            className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-bold text-ink uppercase mb-1">Topic Name / Unit</label>
+                          <input
+                            type="text"
+                            value={contentTopicName}
+                            onChange={(e) => setContentTopicName(e.target.value)}
+                            placeholder="e.g. Motion in One Dimension"
+                            className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </section>
 
+              {/* 2. Choose Document Type & Upload File */}
               <section className="border border-line bg-paper p-6 sm:p-8 shadow-sm">
-                <h2 className="text-lg font-bold font-serif text-ink mb-4 border-b border-line pb-2">2. Upload File</h2>
-                <input
-                  type="file"
-                  onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                  className="w-full border border-line bg-white p-3 text-sm text-ink mb-4"
-                />
+                <h2 className="text-lg font-bold font-serif text-ink mb-4 border-b border-line pb-2">2. Document Type & File Upload</h2>
+                <div className="mb-4">
+                  <label className="block text-xs font-bold text-ink uppercase mb-2">Document Type Category</label>
+                  <select
+                    value={documentType}
+                    onChange={(e) => setDocumentType(e.target.value as any)}
+                    className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none font-semibold"
+                  >
+                    <option value="textbook">Textbook / Complete Study Module</option>
+                    <option value="sample_questions">Sample Question Bank / Exercise Sheet</option>
+                    <option value="sample_question_paper">Previous Years Question Paper (PYQ)</option>
+                    <option value="explanation">Concept Explanations & Notes</option>
+                    <option value="table_of_contents">Table of Contents / Syllabus Blueprint</option>
+                  </select>
+                </div>
+
+                <div className="mb-6">
+                  <label className="block text-xs font-bold text-ink uppercase mb-2">Attach Course File (.pdf, .docx, .txt)</label>
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt,.csv"
+                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                    className="w-full border border-line bg-white p-3 text-sm text-ink"
+                  />
+                </div>
+
                 <button
                   type="submit"
-                  disabled={uploading || !file}
-                  className="w-full bg-indigo text-paper py-3 font-bold text-sm hover:bg-ink transition-colors disabled:opacity-50"
+                  disabled={uploading || !file || selectedExamIds.length === 0}
+                  className="w-full bg-indigo text-paper py-3.5 font-bold text-sm hover:bg-ink transition-colors disabled:opacity-50 shadow"
                 >
-                  🚀 Upload Course Material
+                  {uploading
+                    ? "Syncing Curriculum & Indexing Course Material..."
+                    : `🚀 Upload & Sync Material (${selectedExamIds.length} Exam${selectedExamIds.length > 1 ? "s" : ""})`}
                 </button>
               </section>
             </form>

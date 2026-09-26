@@ -36,11 +36,17 @@ async def upload_document(
     exam_type_id: uuid.UUID | None = Form(None),
     exam_type_ids: str | None = Form(None),
     document_type: DocumentType = Form(...),
+    material_scope: str | None = Form("whole_subject"),  # "whole_exam" | "whole_subject" | "single_content"
     subject_id: uuid.UUID | None = Form(None),
+    subject_name: str | None = Form(None),
     chapter_id: uuid.UUID | None = Form(None),
+    chapter_name: str | None = Form(None),
     topic_id: uuid.UUID | None = Form(None),
+    topic_name: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
 ):
+    from sqlalchemy import func
+
     # Parse target exam IDs (single or multiple)
     target_exam_ids: list[uuid.UUID] = []
     if exam_type_ids:
@@ -71,14 +77,6 @@ async def upload_document(
     if len(file_bytes) == 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Uploaded file is empty.")
 
-    # Validate non-exam references
-    if subject_id and not await db.get(Subject, subject_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Subject not found.")
-    if chapter_id and not await db.get(Chapter, chapter_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Chapter not found.")
-    if topic_id and not await db.get(Topic, topic_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Topic not found.")
-
     storage = get_storage()
     created_docs = []
     last_job = None
@@ -88,14 +86,66 @@ async def upload_document(
         if not exam_type:
             continue
 
+        resolved_subject_id = subject_id
+        resolved_chapter_id = chapter_id
+        resolved_topic_id = topic_id
+
+        # Auto-provision Subject if name passed
+        if not resolved_subject_id and subject_name and subject_name.strip():
+            clean_sname = subject_name.strip().capitalize()
+            subj_res = await db.execute(
+                select(Subject).where(Subject.exam_type_id == target_exam_id, func.lower(Subject.name) == clean_sname.lower())
+            )
+            existing_s = subj_res.scalar_one_or_none()
+            if existing_s:
+                resolved_subject_id = existing_s.id
+            else:
+                new_s = Subject(exam_type_id=target_exam_id, name=clean_sname)
+                db.add(new_s)
+                await db.commit()
+                await db.refresh(new_s)
+                resolved_subject_id = new_s.id
+
+        # Auto-provision Chapter if name passed
+        if resolved_subject_id and not resolved_chapter_id and chapter_name and chapter_name.strip():
+            clean_cname = chapter_name.strip()
+            chap_res = await db.execute(
+                select(Chapter).where(Chapter.subject_id == resolved_subject_id, func.lower(Chapter.name) == clean_cname.lower())
+            )
+            existing_c = chap_res.scalar_one_or_none()
+            if existing_c:
+                resolved_chapter_id = existing_c.id
+            else:
+                new_c = Chapter(subject_id=resolved_subject_id, name=clean_cname)
+                db.add(new_c)
+                await db.commit()
+                await db.refresh(new_c)
+                resolved_chapter_id = new_c.id
+
+        # Auto-provision Topic if name passed
+        if resolved_chapter_id and not resolved_topic_id and topic_name and topic_name.strip():
+            clean_tname = topic_name.strip()
+            top_res = await db.execute(
+                select(Topic).where(Topic.chapter_id == resolved_chapter_id, func.lower(Topic.name) == clean_tname.lower())
+            )
+            existing_t = top_res.scalar_one_or_none()
+            if existing_t:
+                resolved_topic_id = existing_t.id
+            else:
+                new_t = Topic(chapter_id=resolved_chapter_id, name=clean_tname)
+                db.add(new_t)
+                await db.commit()
+                await db.refresh(new_t)
+                resolved_topic_id = new_t.id
+
         storage_path = storage.save(file_bytes, file.filename, prefix=f"documents/{exam_type.code.lower()}")
 
         existing = await db.execute(
             select(Document).where(
                 Document.exam_type_id == target_exam_id,
-                Document.subject_id == subject_id,
-                Document.chapter_id == chapter_id,
-                Document.topic_id == topic_id,
+                Document.subject_id == resolved_subject_id,
+                Document.chapter_id == resolved_chapter_id,
+                Document.topic_id == resolved_topic_id,
                 Document.document_type == document_type,
             )
         )
@@ -109,9 +159,9 @@ async def upload_document(
             file_size=len(file_bytes),
             storage_path=storage_path,
             exam_type_id=target_exam_id,
-            subject_id=subject_id,
-            chapter_id=chapter_id,
-            topic_id=topic_id,
+            subject_id=resolved_subject_id,
+            chapter_id=resolved_chapter_id,
+            topic_id=resolved_topic_id,
             document_type=document_type,
             version=next_version,
             status=DocumentStatus.UPLOADED,

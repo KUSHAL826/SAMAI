@@ -49,8 +49,90 @@ async def create_exam_type(payload: ExamTypeCreate, db: AsyncSession = Depends(g
     return exam_type
 
 
+async def ensure_default_curriculum(db: AsyncSession):
+    """Auto-seeds default ExamTypes, Subjects, Chapters, and Topics if database is empty."""
+    res = await db.execute(select(ExamType))
+    exams = res.scalars().all()
+    if not exams:
+        neet = ExamType(code="NEET", name="NEET Competitive Exam")
+        kcet = ExamType(code="KCET", name="KCET Entrance Exam")
+        jee = ExamType(code="JEE", name="JEE Main & Advanced Exam")
+        db.add_all([neet, kcet, jee])
+        await db.commit()
+        await db.refresh(neet)
+        await db.refresh(kcet)
+        await db.refresh(jee)
+        exams = [neet, kcet, jee]
+
+    for ex in exams:
+        subjs_res = await db.execute(select(Subject).where(Subject.exam_type_id == ex.id))
+        subjs = subjs_res.scalars().all()
+        if not subjs:
+            names = ["Physics", "Chemistry", "Biology"] if ex.code == "NEET" else (
+                ["Physics", "Chemistry", "Mathematics", "Biology"] if ex.code == "KCET" else ["Physics", "Chemistry", "Mathematics"]
+            )
+            created_subjs = []
+            for n in names:
+                sb = Subject(exam_type_id=ex.id, name=n)
+                db.add(sb)
+                created_subjs.append(sb)
+            await db.commit()
+
+            for sb in created_subjs:
+                await db.refresh(sb)
+                if sb.name == "Physics":
+                    ch1 = Chapter(subject_id=sb.id, name="Mechanics & Kinematics", order_index=1)
+                    ch2 = Chapter(subject_id=sb.id, name="Thermodynamics & Heat", order_index=2)
+                    ch3 = Chapter(subject_id=sb.id, name="Electricity & Magnetism", order_index=3)
+                    db.add_all([ch1, ch2, ch3])
+                    await db.commit()
+
+                    t1 = Topic(chapter_id=ch1.id, name="Motion in 1D & 2D", order_index=1)
+                    t2 = Topic(chapter_id=ch1.id, name="Laws of Motion & Work Power Energy", order_index=2)
+                    t3 = Topic(chapter_id=ch2.id, name="Laws of Thermodynamics", order_index=1)
+                    t4 = Topic(chapter_id=ch3.id, name="Electrostatics & Current Electricity", order_index=1)
+                    db.add_all([t1, t2, t3, t4])
+                    await db.commit()
+
+                elif sb.name == "Chemistry":
+                    ch1 = Chapter(subject_id=sb.id, name="Organic Chemistry", order_index=1)
+                    ch2 = Chapter(subject_id=sb.id, name="Physical Chemistry", order_index=2)
+                    ch3 = Chapter(subject_id=sb.id, name="Inorganic Chemistry", order_index=3)
+                    db.add_all([ch1, ch2, ch3])
+                    await db.commit()
+
+                    t1 = Topic(chapter_id=ch1.id, name="Hydrocarbons & Reaction Mechanisms", order_index=1)
+                    t2 = Topic(chapter_id=ch2.id, name="Chemical Kinetics & Solutions", order_index=1)
+                    t3 = Topic(chapter_id=ch3.id, name="Periodic Table & Chemical Bonding", order_index=1)
+                    db.add_all([t1, t2, t3])
+                    await db.commit()
+
+                elif sb.name == "Biology":
+                    ch1 = Chapter(subject_id=sb.id, name="Cellular Biology & Genetics", order_index=1)
+                    ch2 = Chapter(subject_id=sb.id, name="Human Physiology & Reproduction", order_index=2)
+                    db.add_all([ch1, ch2])
+                    await db.commit()
+
+                    t1 = Topic(chapter_id=ch1.id, name="Cell Structure & Genetics", order_index=1)
+                    t2 = Topic(chapter_id=ch2.id, name="Human Physiology & Reproduction", order_index=1)
+                    db.add_all([t1, t2])
+                    await db.commit()
+
+                elif sb.name == "Mathematics":
+                    ch1 = Chapter(subject_id=sb.id, name="Calculus & Derivatives", order_index=1)
+                    ch2 = Chapter(subject_id=sb.id, name="Algebra & Coordinate Geometry", order_index=2)
+                    db.add_all([ch1, ch2])
+                    await db.commit()
+
+                    t1 = Topic(chapter_id=ch1.id, name="Limits, Continuity & Integrals", order_index=1)
+                    t2 = Topic(chapter_id=ch2.id, name="Matrices, Vectors & Geometry", order_index=1)
+                    db.add_all([t1, t2])
+                    await db.commit()
+
+
 @router.get("/exam-types", response_model=list[ExamTypeOut])
 async def list_exam_types(db: AsyncSession = Depends(get_db)):
+    await ensure_default_curriculum(db)
     result = await db.execute(select(ExamType).order_by(ExamType.name))
     return result.scalars().all()
 
@@ -90,6 +172,7 @@ async def create_subject(payload: SubjectCreate, db: AsyncSession = Depends(get_
 
 @router.get("/subjects", response_model=list[SubjectOut])
 async def list_subjects(exam_type_id: uuid.UUID | None = None, db: AsyncSession = Depends(get_db)):
+    await ensure_default_curriculum(db)
     query = select(Subject)
     if exam_type_id:
         query = query.where(Subject.exam_type_id == exam_type_id)
