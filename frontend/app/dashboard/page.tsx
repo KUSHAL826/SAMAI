@@ -94,6 +94,77 @@ type MockPaperPackage = {
   };
 };
 
+const EXAM_PATTERNS: Record<
+  string,
+  {
+    name: string;
+    code: string;
+    totalQuestions: number;
+    durationMins: number;
+    markingScheme: string;
+    positiveMarks: number;
+    negativeMarks: number;
+    description: string;
+    subjectsHint: string;
+  }
+> = {
+  NEET: {
+    name: "NEET UG Medical Entrance",
+    code: "NEET",
+    totalQuestions: 180,
+    durationMins: 180,
+    markingScheme: "+4 Correct, -1 Negative Marking",
+    positiveMarks: 4,
+    negativeMarks: 1,
+    description:
+      "National Eligibility cum Entrance Test (Medical). Strictly grounded in NCERT Physics, Chemistry, Biology & PYQs.",
+    subjectsHint: "Physics, Chemistry, Biology (Botany & Zoology)",
+  },
+  KCET: {
+    name: "KCET Engineering & Pharmacy",
+    code: "KCET",
+    totalQuestions: 60,
+    durationMins: 80,
+    markingScheme: "+1 Correct, NO Negative Marking (0 Penalty)",
+    positiveMarks: 1,
+    negativeMarks: 0,
+    description:
+      "Karnataka Common Entrance Test. Focuses on speed & core concept application across State Syllabus & Textbooks.",
+    subjectsHint: "Physics, Chemistry, Mathematics, Biology",
+  },
+  JEE: {
+    name: "JEE Main Engineering Entrance",
+    code: "JEE",
+    totalQuestions: 90,
+    durationMins: 180,
+    markingScheme: "+4 Correct, -1 Negative Marking",
+    positiveMarks: 4,
+    negativeMarks: 1,
+    description:
+      "Joint Entrance Examination for IITs & NITs. High difficulty analytical problems grounded in standard physics/chem/math reference works.",
+    subjectsHint: "Physics, Chemistry, Mathematics",
+  },
+};
+
+function getExamPattern(examCode?: string, examName?: string) {
+  const code = (examCode || "").toUpperCase();
+  const name = (examName || "").toUpperCase();
+  if (code.includes("NEET") || name.includes("NEET")) return EXAM_PATTERNS.NEET;
+  if (code.includes("KCET") || name.includes("KCET")) return EXAM_PATTERNS.KCET;
+  if (code.includes("JEE") || name.includes("JEE")) return EXAM_PATTERNS.JEE;
+  return {
+    name: examName || "Competitive Exam",
+    code: examCode || "EXAM",
+    totalQuestions: 45,
+    durationMins: 60,
+    markingScheme: "+4 Correct, -1 Negative Marking",
+    positiveMarks: 4,
+    negativeMarks: 1,
+    description: "Standard Competitive Entrance Examination pattern grounded in textbook content.",
+    subjectsHint: "Core Exam Syllabus Subjects",
+  };
+}
+
 export default function StudentDashboardPage() {
   const router = useRouter();
   const [student, setStudent] = useState<Student | null>(null);
@@ -182,7 +253,10 @@ export default function StudentDashboardPage() {
       setExams(examsList);
       setSubjects(subjectsList);
       setKnowledgeBaseExams(kbRes.exams || []);
-      if (examsList.length > 0) setSelectedExamId(examsList[0].id);
+      if (examsList.length > 0) {
+        setSelectedExamId(examsList[0].id);
+        setMockExamId(examsList[0].id);
+      }
 
       const topicsMap: Record<string, Chapter[]> = {};
       await Promise.all(
@@ -201,10 +275,20 @@ export default function StudentDashboardPage() {
     }
   }
 
+  const activeExamObj = exams.find((e) => e.id === selectedExamId) || exams[0];
+  const activePattern = getExamPattern(activeExamObj?.code, activeExamObj?.name);
+
+  // Filter subjects by selected exam section in sidebar
+  const examSubjects = selectedExamId
+    ? subjects.filter((s) => s.exam_type_id === selectedExamId)
+    : subjects;
+  const displaySubjects = examSubjects.length > 0 ? examSubjects : subjects;
+
   const selectedKnowledgeExam = knowledgeBaseExams.find((e) => e.id === mockExamId);
-  const availableKnowledgeTopics: Array<{ id: string; name: string; topics: Array<{ id: string; name: string }> }> = selectedKnowledgeExam
-    ? selectedKnowledgeExam.subjects.flatMap((s: any) => s.chapters || [])
-    : knowledgeBaseExams.flatMap((e: any) => (e.subjects || []).flatMap((s: any) => s.chapters || []));
+  const availableKnowledgeTopics: Array<{ id: string; name: string; topics: Array<{ id: string; name: string }> }> =
+    selectedKnowledgeExam
+      ? selectedKnowledgeExam.subjects.flatMap((s: any) => s.chapters || [])
+      : knowledgeBaseExams.flatMap((e: any) => (e.subjects || []).flatMap((s: any) => s.chapters || []));
 
   async function fetchAnalyticsData() {
     setLoadingAnalytics(true);
@@ -369,7 +453,7 @@ export default function StudentDashboardPage() {
         title: mockPaperTitle,
         question_count: mockPaperCount,
         exam_type_id: mockExamId !== "all" ? mockExamId : undefined,
-        exam_code: selectedExamObj ? selectedExamObj.code : "NEET/KCET/JEE",
+        exam_code: selectedExamObj ? selectedExamObj.code : activePattern.code,
         topic_ids: mockTopicScope === "selected" ? mockSelectedTopics : [],
         difficulty: mockDifficulty,
         source_material: "textbooks_and_pyqs_only",
@@ -382,7 +466,6 @@ export default function StudentDashboardPage() {
     }
   }
 
-  // Open Clean Print Window for Test Paper (Questions Only)
   function printTestPaperOnly() {
     if (!mockPackage) return;
     const printWin = window.open("", "_blank");
@@ -418,7 +501,7 @@ export default function StudentDashboardPage() {
           <div class="instructions">
             <strong>EXAMINATION INSTRUCTIONS FOR STUDENTS:</strong><br/>
             1. Total Duration: ${Math.round(mockPackage.total_questions * 1.2)} Minutes.<br/>
-            2. Marking Scheme: Each correct response carries +4 marks. Each incorrect response incurs -1 mark penalty.<br/>
+            2. Marking Scheme: ${activePattern.markingScheme}.<br/>
             3. Use blue or black ballpoint pen to fill your answers in the OMR grid provided on the last page.
           </div>
           <div>
@@ -447,7 +530,6 @@ export default function StudentDashboardPage() {
     printWin.document.close();
   }
 
-  // Open Clean Print Window for Master Answer Key & Solutions Paper (For Teachers)
   function printKeyAnswerPaperOnly() {
     if (!mockPackage) return;
     const printWin = window.open("", "_blank");
@@ -617,7 +699,7 @@ export default function StudentDashboardPage() {
             <div>
               <h1 className="font-serif text-xl font-bold text-paper">{testSession.title}</h1>
               <p className="text-xs text-paper/70 mt-0.5">
-                Question {testSession.activeIdx + 1} of {testSession.questions.length} | Marking: +4.0 / -1.0
+                Question {testSession.activeIdx + 1} of {testSession.questions.length} | Marking: {activePattern.markingScheme}
               </p>
             </div>
 
@@ -933,588 +1015,730 @@ export default function StudentDashboardPage() {
             </div>
           </div>
         </div>
-      ) : activeTab === "analytics" ? (
-        /* TAB 2: STUDENT TRACKING & PERFORMANCE GRAPH ANALYTICS */
-        <div className="mx-auto max-w-7xl px-6 pt-8">
-          <div className="border-b border-line pb-6 mb-8 flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h1 className="font-serif text-3xl font-bold text-ink">Student Performance & Progress Graph</h1>
-              <p className="text-slate text-sm mt-1">
-                Real-time tracking of test attempts, score trajectory over time, subject mastery, and NEET/KCET/JEE exam readiness.
+      ) : (
+        /* DASHBOARD WITH LEFT EXAM SIDEBAR */
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 pt-6 flex flex-col md:flex-row gap-6">
+          {/* SIDEBAR: EXAM SECTIONS (No. of Sections = No. of Exams) */}
+          <aside className="w-full md:w-72 lg:w-80 shrink-0 space-y-6">
+            {/* Exam Navigation Box */}
+            <div className="border border-line bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between border-b border-line pb-3 mb-4">
+                <h2 className="font-serif text-sm font-bold text-ink uppercase tracking-wider flex items-center gap-2">
+                  <span className="text-indigo text-lg">📚</span> Exam Sections ({exams.length})
+                </h2>
+                <span className="text-[10px] font-mono bg-indigo/10 text-indigo px-2 py-0.5 rounded font-bold">
+                  {exams.length} Exams Active
+                </span>
+              </div>
+
+              <p className="text-xs text-slate mb-4">
+                Select an exam section to adapt your practice hub, syllabus pattern, and question difficulty level:
               </p>
-            </div>
-            <button
-              onClick={fetchAnalyticsData}
-              className="px-4 py-2 border border-line text-xs font-medium text-slate hover:text-ink"
-            >
-              🔄 Refresh Analytics
-            </button>
-          </div>
 
-          {loadingAnalytics ? (
-            <div className="p-12 text-center text-slate">Loading student performance analytics...</div>
-          ) : analytics ? (
-            <div className="space-y-10">
-              {/* Summary Scorecard Row */}
-              <div className="grid sm:grid-cols-4 gap-6">
-                <div className="border border-line bg-white p-6 text-center shadow-sm">
-                  <span className="text-xs text-slate uppercase block font-mono">Total Tests Taken</span>
-                  <span className="font-serif text-3xl font-bold text-indigo mt-2 block">{analytics.total_tests}</span>
-                </div>
-                <div className="border border-line bg-white p-6 text-center shadow-sm">
-                  <span className="text-xs text-slate uppercase block font-mono">Average Score %</span>
-                  <span className="font-serif text-3xl font-bold text-emerald-600 mt-2 block">
-                    {analytics.average_percentage}%
-                  </span>
-                </div>
-                <div className="border border-line bg-white p-6 text-center shadow-sm">
-                  <span className="text-xs text-slate uppercase block font-mono">Overall Accuracy</span>
-                  <span className="font-serif text-3xl font-bold text-ink mt-2 block">
-                    {analytics.overall_accuracy}%
-                  </span>
-                </div>
-                <div className="border border-line bg-white p-6 text-center shadow-sm">
-                  <span className="text-xs text-slate uppercase block font-mono">Exam Readiness Index</span>
-                  <span className="font-serif text-3xl font-bold text-amber mt-2 block">
-                    {analytics.readiness_index}/100
-                  </span>
-                  <span className="text-[10px] text-slate mt-1 block leading-tight">{analytics.readiness_label}</span>
-                </div>
-              </div>
+              {/* Exam Sidebar Buttons (1 section per exam) */}
+              <div className="space-y-2.5">
+                {exams.map((ex) => {
+                  const isSelected = selectedExamId === ex.id;
+                  const pattern = getExamPattern(ex.code, ex.name);
+                  const kbData = knowledgeBaseExams.find((k) => k.id === ex.id);
+                  const docCount = kbData?.document_count || 0;
 
-              {/* VISUAL SCORE TRAJECTORY GRAPH (SVG Line & Bar Chart) */}
-              <div className="border border-line bg-white p-6 shadow-sm">
-                <div className="flex items-center justify-between border-b border-line pb-4 mb-6">
-                  <div>
-                    <h2 className="font-serif text-xl font-bold text-ink">Score Performance Trajectory Graph</h2>
-                    <p className="text-xs text-slate">Historical score percentage across past test attempts</p>
-                  </div>
-                </div>
-
-                {analytics.score_history.length > 0 ? (
-                  <div className="h-64 w-full flex items-end gap-4 pt-8 pb-4 px-2 border-b border-line bg-paper/50 relative">
-                    {analytics.score_history.map((item, idx) => {
-                      const heightPct = Math.max(10, Math.min(100, item.percentage));
-                      return (
-                        <div key={item.id || idx} className="flex-1 flex flex-col items-center h-full justify-end group relative">
-                          {/* Tooltip on hover */}
-                          <div className="absolute -top-12 hidden group-hover:block bg-ink text-paper text-[10px] p-2 rounded shadow-lg whitespace-nowrap z-20">
-                            <strong>{item.test_title}</strong><br />
-                            Score: {item.score} ({item.percentage}%) | Accuracy: {item.accuracy}%
-                          </div>
-
-                          <span className="text-[11px] font-bold text-indigo mb-1">{item.percentage}%</span>
-                          <div
-                            style={{ height: `${heightPct}%` }}
-                            className="w-full bg-gradient-to-t from-indigo to-indigo/70 rounded-t transition-all group-hover:from-emerald-600 group-hover:to-emerald-400"
-                          ></div>
-                          <span className="text-[10px] text-slate truncate w-full text-center mt-2">
-                            {item.date}
+                  return (
+                    <button
+                      key={ex.id}
+                      onClick={() => {
+                        setSelectedExamId(ex.id);
+                        setMockExamId(ex.id);
+                        setSelectedTopicIds([]);
+                        setSelectedSubjectIds([]);
+                      }}
+                      className={`w-full text-left p-3.5 border transition-all flex flex-col gap-2 ${
+                        isSelected
+                          ? "border-indigo bg-indigo/5 text-ink shadow-sm ring-1 ring-indigo"
+                          : "border-line bg-paper hover:border-slate text-slate hover:text-ink"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-serif font-bold text-sm text-ink flex items-center gap-2">
+                          <span className="text-base">
+                            {ex.code.includes("NEET") ? "🩺" : ex.code.includes("KCET") ? "⚡" : "🎓"}
                           </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="p-8 text-center text-xs text-slate bg-paper">
-                    Take your first CBT practice test to view your performance trajectory graph.
-                  </div>
-                )}
-              </div>
-
-              {/* SUBJECT MASTERY BREAKDOWN */}
-              <div className="grid lg:grid-cols-2 gap-8">
-                <div className="border border-line bg-white p-6 shadow-sm">
-                  <h2 className="font-serif text-xl font-bold text-ink mb-4 pb-2 border-b border-line">
-                    Subject Accuracy & Mastery Meters
-                  </h2>
-                  <div className="space-y-5">
-                    {analytics.subject_breakdown.map((sb) => (
-                      <div key={sb.subject_name}>
-                        <div className="flex justify-between text-xs font-semibold text-ink mb-1.5">
-                          <span>{sb.subject_name}</span>
-                          <span className="text-indigo">{sb.accuracy}% Accuracy</span>
-                        </div>
-                        <div className="w-full bg-line h-3 rounded-full overflow-hidden">
-                          <div
-                            style={{ width: `${Math.min(100, sb.accuracy)}%` }}
-                            className="bg-indigo h-full transition-all"
-                          ></div>
-                        </div>
+                          {ex.name}
+                        </span>
+                        <span
+                          className={`text-[10px] font-mono font-bold px-2 py-0.5 ${
+                            isSelected ? "bg-indigo text-paper" : "bg-line text-slate"
+                          }`}
+                        >
+                          {ex.code}
+                        </span>
                       </div>
+
+                      <div className="flex flex-wrap items-center justify-between text-[11px] text-slate border-t border-line/60 pt-2">
+                        <span>{pattern.markingScheme}</span>
+                        <span className="font-semibold text-indigo">{docCount} Grounded Docs</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Active Exam Training Blueprint & Difficulty Config */}
+            {activeExamObj && (
+              <div className="border border-line bg-white p-5 shadow-sm space-y-4">
+                <h3 className="font-serif text-sm font-bold text-ink border-b border-line pb-2 flex items-center gap-2">
+                  <span>⚙️</span> {activeExamObj.code} Training Config
+                </h3>
+
+                {/* Difficulty Selector */}
+                <div>
+                  <label className="text-[11px] font-bold text-slate uppercase block mb-1.5">
+                    Target Difficulty Level
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5 text-xs">
+                    {["mixed", "easy", "moderate", "difficult"].map((d) => (
+                      <button
+                        key={d}
+                        onClick={() => setDifficulty(d)}
+                        className={`py-1.5 px-2 border text-center capitalize text-[11px] font-semibold transition-all ${
+                          difficulty === d
+                            ? "bg-indigo text-paper border-indigo"
+                            : "bg-paper border-line text-slate hover:text-ink"
+                        }`}
+                      >
+                        {d}
+                      </button>
                     ))}
                   </div>
                 </div>
 
-                <div className="border border-line bg-white p-6 shadow-sm">
-                  <h2 className="font-serif text-xl font-bold text-ink mb-4 pb-2 border-b border-line">
-                    AI Topic Insights & Recommendations
-                  </h2>
-                  <div className="space-y-4 text-xs">
-                    <div className="p-4 bg-amber-50 border border-amber-200">
-                      <strong className="text-amber-900 font-bold block mb-1">⚠️ Focus Areas (Weak Topics):</strong>
-                      <ul className="list-disc pl-4 space-y-1 text-amber-800">
-                        {analytics.weak_topics.map((t) => (
-                          <li key={t}>{t}</li>
-                        ))}
-                      </ul>
-                    </div>
-
-                    <div className="p-4 bg-emerald-50 border border-emerald-200">
-                      <strong className="text-emerald-900 font-bold block mb-1">✅ High Mastery Topics:</strong>
-                      <ul className="list-disc pl-4 space-y-1 text-emerald-800">
-                        {analytics.strong_topics.map((t) => (
-                          <li key={t}>{t}</li>
-                        ))}
-                      </ul>
-                    </div>
+                {/* Blueprint Stats */}
+                <div className="bg-paper p-3 border border-line space-y-1.5 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate">Target Exam:</span>
+                    <strong className="text-ink">{activePattern.code}</strong>
                   </div>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        /* TAB 3: TEACHER & STUDENT MOCK PAPER DOWNLOADER */
-        activeTab === "download_papers" ? (
-          <div className="mx-auto max-w-5xl px-6 pt-8">
-            <div className="border border-line bg-white p-8 shadow-md">
-              <div className="border-b border-line pb-6 mb-8 flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <h1 className="font-serif text-3xl font-bold text-ink">Teacher & Student Mock Paper Downloader</h1>
-                  <p className="text-slate text-sm mt-1">
-                    Select exam material, topic scope, and difficulty level. Generate 2 distinct printable documents: (1) Test Question Paper for students, and (2) Master Answer Key & Solutions Paper for teachers.
-                  </p>
-                </div>
-                <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1.5">
-                  <span>🔒 Grounded RAG Generation</span>
-                  <span className="text-[10px] bg-emerald-700 text-white px-1.5 py-0.5 rounded">Textbooks & PYQs Only</span>
-                </div>
-              </div>
-
-              {/* Config Form */}
-              <div className="space-y-6 mb-8 bg-paper p-6 border border-line">
-                <div className="grid sm:grid-cols-2 gap-6">
-                  {/* 1. Target Exam / Knowledge Base Source */}
-                  <div>
-                    <label className="text-xs font-bold text-ink uppercase block mb-2">1. Target Exam / Knowledge Base Source</label>
-                    <select
-                      value={mockExamId}
-                      onChange={(e) => {
-                        setMockExamId(e.target.value);
-                        setMockSelectedTopics([]);
-                      }}
-                      className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none font-semibold"
-                    >
-                      <option value="all">All Exams Knowledge Base</option>
-                      {knowledgeBaseExams.map((ex) => (
-                        <option key={ex.id} value={ex.id}>
-                          {ex.name} ({ex.code}) - [{ex.document_count || 0} Textbooks/PYQs]
-                        </option>
-                      ))}
-                    </select>
+                  <div className="flex justify-between">
+                    <span className="text-slate">Standard Qs:</span>
+                    <strong className="text-indigo">{activePattern.totalQuestions} Questions</strong>
                   </div>
-
-                  {/* 2. Paper Title */}
-                  <div>
-                    <label className="text-xs font-bold text-ink uppercase block mb-2">2. Paper Title</label>
-                    <input
-                      type="text"
-                      value={mockPaperTitle}
-                      onChange={(e) => setMockPaperTitle(e.target.value)}
-                      className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
-                      placeholder="e.g. NEET All India Mock Test"
-                    />
+                  <div className="flex justify-between">
+                    <span className="text-slate">Duration:</span>
+                    <strong className="text-ink">{activePattern.durationMins} Mins</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate">Marking Scheme:</span>
+                    <strong className="text-emerald-700">{activePattern.markingScheme}</strong>
                   </div>
                 </div>
 
-                <div className="grid sm:grid-cols-2 gap-6">
-                  {/* 3. Number of Questions */}
-                  <div>
-                    <label className="text-xs font-bold text-ink uppercase block mb-2">3. Total Number of Questions</label>
-                    <select
-                      value={mockPaperCount}
-                      onChange={(e) => setMockPaperCount(Number(e.target.value))}
-                      className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
-                    >
-                      <option value={10}>10 Questions (Quick Quiz)</option>
-                      <option value={15}>15 Questions (Classroom Unit Test)</option>
-                      <option value={30}>30 Questions (Standard Subject Mock)</option>
-                      <option value={45}>45 Questions (NEET Single Subject Mock)</option>
-                      <option value={60}>60 Questions (KCET Full Subject Mock)</option>
-                      <option value={90}>90 Questions (JEE Main Mock Paper)</option>
-                      <option value={180}>180 Questions (Full Length NEET Paper)</option>
-                      <option value={200}>200 Questions (Full NEET Pattern Paper)</option>
-                    </select>
-                  </div>
-
-                  {/* 4. Question Difficulty Level */}
-                  <div>
-                    <label className="text-xs font-bold text-ink uppercase block mb-2">4. Question Difficulty Level</label>
-                    <select
-                      value={mockDifficulty}
-                      onChange={(e) => setMockDifficulty(e.target.value)}
-                      className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
-                    >
-                      <option value="mixed">Mixed (Exam Blueprint Standard: 30% Easy, 50% Medium, 20% Hard)</option>
-                      <option value="easy">Easy Level Questions Only</option>
-                      <option value="moderate">Moderate / Medium Level Questions Only</option>
-                      <option value="difficult">Difficult / Hard Level Questions Only</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* 5. Topic Scope Selection */}
-                <div className="border-t border-line pt-4">
-                  <label className="text-xs font-bold text-ink uppercase block mb-2">5. Syllabus / Topic Scope Selection</label>
-                  <div className="flex items-center gap-6 mb-4">
-                    <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                      <input
-                        type="radio"
-                        name="topicScope"
-                        checked={mockTopicScope === "all"}
-                        onChange={() => {
-                          setMockTopicScope("all");
-                          setMockSelectedTopics([]);
-                        }}
-                        className="accent-indigo"
-                      />
-                      All Topics (Complete Exam Syllabus)
-                    </label>
-                    <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                      <input
-                        type="radio"
-                        name="topicScope"
-                        checked={mockTopicScope === "selected"}
-                        onChange={() => setMockTopicScope("selected")}
-                        className="accent-indigo"
-                      />
-                      Specific Selected Topics / Chapters
-                    </label>
-                  </div>
-
-                  {/* Dynamic Topic Picker if "selected" */}
-                  {mockTopicScope === "selected" && (
-                    <div className="p-4 bg-white border border-line max-h-60 overflow-y-auto space-y-4">
-                      {availableKnowledgeTopics.length === 0 ? (
-                        <p className="text-xs text-slate">No specific topics configured for this exam yet. All topics will be used.</p>
-                      ) : (
-                        availableKnowledgeTopics.map((chap) => (
-                          <div key={chap.id} className="space-y-1.5">
-                            <span className="text-xs font-bold text-indigo uppercase block">{chap.name}</span>
-                            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2">
-                              {chap.topics.map((tp: any) => (
-                                <label key={tp.id} className="flex items-center gap-2 text-xs text-slate hover:text-ink cursor-pointer bg-paper p-2 border border-line">
-                                  <input
-                                    type="checkbox"
-                                    checked={mockSelectedTopics.includes(tp.id)}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setMockSelectedTopics([...mockSelectedTopics, tp.id]);
-                                      } else {
-                                        setMockSelectedTopics(mockSelectedTopics.filter((tId) => tId !== tp.id));
-                                      }
-                                    }}
-                                    className="accent-indigo"
-                                  />
-                                  <span className="truncate">{tp.name}</span>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* 6. Source Material Restriction Banner */}
-                <div className="bg-indigo/10 border border-indigo/20 p-3 rounded flex items-center justify-between text-xs text-indigo">
-                  <span className="font-semibold">📚 Generation Constraint:</span>
-                  <span>Questions generated strictly from Textbooks & Previous Years Question Papers in Knowledge Base.</span>
-                </div>
-              </div>
-
-              <button
-                onClick={generateMockPaperPackage}
-                disabled={generatingMockPackage}
-                className="w-full bg-indigo text-paper py-3.5 font-medium text-sm hover:bg-ink transition-colors shadow mb-8 disabled:opacity-50"
-              >
-                {generatingMockPackage ? "Extracting Grounded Questions & Rendering Papers Package..." : "⚡ Generate 2 Mock Papers Package (Strict Grounded RAG)"}
-              </button>
-
-              {/* Generated Papers Download Buttons */}
-              {mockPackage && (
-                <div className="p-6 border border-indigo/30 bg-indigo/5 space-y-6">
-                  <div className="border-b border-line pb-3">
-                    <h3 className="font-serif text-xl font-bold text-ink">Package Ready for Download & Printing</h3>
-                    <p className="text-xs text-slate mt-1">
-                      {mockPackage.title} ({mockPackage.total_questions} Questions)
-                    </p>
-                  </div>
-
-                  <div className="grid sm:grid-cols-2 gap-6">
-                    {/* Paper 1: Test Paper */}
-                    <div className="border border-line bg-white p-6 shadow-sm flex flex-col justify-between">
-                      <div>
-                        <span className="text-3xl mb-2 block">📄</span>
-                        <h4 className="font-serif text-lg font-bold text-ink">1. Test Question Paper</h4>
-                        <p className="text-xs text-slate leading-relaxed mb-6 mt-1">
-                          Clean student test paper with instructions, question list, multiple-choice options, and printable OMR answer bubble grid.
-                        </p>
-                      </div>
-                      <button
-                        onClick={printTestPaperOnly}
-                        className="w-full bg-emerald-600 text-paper py-2.5 text-xs font-bold hover:bg-emerald-700 transition-colors shadow"
-                      >
-                        📥 Download / Print Test Paper (Questions Only)
-                      </button>
-                    </div>
-
-                    {/* Paper 2: Answer Key & Solutions Paper */}
-                    <div className="border border-line bg-white p-6 shadow-sm flex flex-col justify-between">
-                      <div>
-                        <span className="text-3xl mb-2 block">🔑</span>
-                        <h4 className="font-serif text-lg font-bold text-ink">2. Master Key & Solutions Paper</h4>
-                        <p className="text-xs text-slate leading-relaxed mb-6 mt-1">
-                          Teacher evaluation paper with complete master answer key matrix and grounded step-by-step solutions for every question.
-                        </p>
-                      </div>
-                      <button
-                        onClick={printKeyAnswerPaperOnly}
-                        className="w-full bg-indigo text-paper py-2.5 text-xs font-bold hover:bg-ink transition-colors shadow"
-                      >
-                        🔑 Download / Print Answer Key & Solutions Paper
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          /* TAB 1: MAIN CBT PRACTICE TESTS VIEW */
-          <div className="mx-auto max-w-7xl px-6 pt-8">
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-6 mb-8">
-              <div>
-                <h1 className="font-serif text-3xl font-bold text-ink">Welcome, {student.name}</h1>
-                <p className="text-slate text-sm mt-1">
-                  Select your target exam and choose from subject sections, topic tests, or full-length CBT mock papers.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 bg-white border border-line p-2 shadow-sm">
-                <span className="text-xs font-bold text-ink font-serif uppercase px-2">Exam Mode:</span>
-                <select
-                  value={selectedExamId}
-                  onChange={(e) => setSelectedExamId(e.target.value)}
-                  className="border border-line bg-paper px-3 py-1.5 text-sm font-semibold text-indigo focus:outline-none"
-                >
-                  {exams.map((ex) => (
-                    <option key={ex.id} value={ex.id}>
-                      {ex.code} — {ex.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid sm:grid-cols-3 gap-6 mb-10">
-              <div className="border border-line bg-paper p-6 shadow-sm flex flex-col justify-between hover:border-indigo transition-colors">
-                <div>
-                  <span className="text-2xl mb-2 block">🎯</span>
-                  <h3 className="font-serif text-lg font-bold text-ink mb-1">Full-Length CBT Mock Test</h3>
-                  <p className="text-xs text-slate leading-relaxed mb-4">
-                    Timed complete exam (180 Questions) following the official pattern across all subjects.
-                  </p>
-                </div>
+                {/* Sidebar Quick Test Launch */}
                 <button
                   onClick={() =>
                     startTest({
-                      title: `${exams.find((e) => e.id === selectedExamId)?.code || "NEET"} Full-Length CBT Mock Test`,
+                      title: `${activeExamObj.code} Full Exam Mock Training`,
                       mode: "full_length",
-                      count: 45,
+                      count: activePattern.totalQuestions > 90 ? 45 : 30,
                       durationMins: 60,
                     })
                   }
                   disabled={loadingTest}
-                  className="w-full bg-indigo text-paper py-2.5 text-xs font-medium hover:bg-ink transition-colors disabled:opacity-50 shadow-sm"
+                  className="w-full bg-indigo text-paper py-2.5 text-xs font-bold hover:bg-ink transition-colors shadow-sm disabled:opacity-50"
                 >
-                  {loadingTest ? "Generating Test..." : "🚀 Launch Full Mock Test"}
+                  {loadingTest ? "Generating..." : `🚀 Launch ${activeExamObj.code} Mock Paper`}
                 </button>
               </div>
+            )}
+          </aside>
 
-              <div className="border border-line bg-paper p-6 shadow-sm flex flex-col justify-between hover:border-indigo transition-colors">
-                <div>
-                  <span className="text-2xl mb-2 block">📑</span>
-                  <h3 className="font-serif text-lg font-bold text-ink mb-1">Multiple Topic Test</h3>
-                  <p className="text-xs text-slate leading-relaxed mb-4">
-                    Select multiple topics using checkboxes under subject sections below to create a combined test paper.
-                  </p>
-                </div>
-                <button
-                  disabled={selectedTopicIds.length === 0 || loadingTest}
-                  onClick={() =>
-                    startTest({
-                      title: `Multiple Topic Practice Test (${selectedTopicIds.length} Topics)`,
-                      mode: "multi_topic",
-                      topicIds: selectedTopicIds,
-                      count: Math.min(50, Math.max(10, selectedTopicIds.length * 5)),
-                    })
-                  }
-                  className="w-full bg-ink text-paper py-2.5 text-xs font-medium hover:bg-indigo transition-colors disabled:opacity-50 shadow-sm"
-                >
-                  {selectedTopicIds.length > 0
-                    ? `Launch Test (${selectedTopicIds.length} Topics Selected)`
-                    : "Check Topics Below to Enable"}
-                </button>
-              </div>
-
-              <div className="border border-line bg-paper p-6 shadow-sm flex flex-col justify-between hover:border-indigo transition-colors">
-                <div>
-                  <span className="text-2xl mb-2 block">⚙️</span>
-                  <h3 className="font-serif text-lg font-bold text-ink mb-1">Custom Test Generator</h3>
-                  <p className="text-xs text-slate leading-relaxed mb-4">
-                    Configure custom question counts (10 to 180 Qs), difficulty levels, and timer settings.
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <select
-                    value={questionCount}
-                    onChange={(e) => setQuestionCount(Number(e.target.value))}
-                    className="w-1/2 border border-line bg-white px-2 py-1 text-xs text-ink focus:outline-none"
+          {/* MAIN CONTENT WORKSPACE */}
+          <div className="flex-1 min-w-0">
+            {activeTab === "analytics" ? (
+              /* TAB 2: STUDENT TRACKING & PERFORMANCE GRAPH ANALYTICS */
+              <div className="border border-line bg-white p-6 shadow-sm">
+                <div className="border-b border-line pb-6 mb-8 flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <h1 className="font-serif text-3xl font-bold text-ink">Student Performance & Progress Graph</h1>
+                    <p className="text-slate text-sm mt-1">
+                      Real-time tracking of test attempts, score trajectory over time, subject mastery, and NEET/KCET/JEE exam readiness.
+                    </p>
+                  </div>
+                  <button
+                    onClick={fetchAnalyticsData}
+                    className="px-4 py-2 border border-line text-xs font-medium text-slate hover:text-ink"
                   >
-                    <option value={10}>10 Qs</option>
-                    <option value={25}>25 Qs</option>
-                    <option value={45}>45 Qs</option>
-                    <option value={90}>90 Qs</option>
-                  </select>
-                  <select
-                    value={difficulty}
-                    onChange={(e) => setDifficulty(e.target.value)}
-                    className="w-1/2 border border-line bg-white px-2 py-1 text-xs text-ink focus:outline-none"
-                  >
-                    <option value="mixed">Mixed</option>
-                    <option value="easy">Easy</option>
-                    <option value="moderate">Moderate</option>
-                    <option value="difficult">Difficult</option>
-                  </select>
+                    🔄 Refresh Analytics
+                  </button>
                 </div>
-              </div>
-            </div>
 
-            <div className="space-y-10">
-              <div className="flex items-center justify-between border-b border-line pb-4">
-                <h2 className="font-serif text-2xl font-bold text-ink">
-                  Subject Curriculum Sections ({subjects.length} Sections)
-                </h2>
-                <span className="text-xs text-slate">
-                  Click any topic card to take a 1-topic test, or select multiple checkboxes for a combined test paper.
-                </span>
-              </div>
-
-              {subjects.map((subj, sIdx) => {
-                const topicsList = subjectTopicsMap[subj.id] || [];
-                const isSubjectSelected = selectedSubjectIds.includes(subj.id);
-
-                return (
-                  <section key={subj.id} className="border border-line bg-paper p-6 shadow-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-4 mb-6">
-                      <div className="flex items-center gap-3">
-                        <span className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo text-paper text-sm font-bold font-serif">
-                          {sIdx + 1}
-                        </span>
-                        <div>
-                          <h3 className="font-serif text-xl font-bold text-ink">
-                            Section {sIdx + 1}: {subj.name}
-                          </h3>
-                          <p className="text-xs text-slate">
-                            {topicsList.length} approved topic{topicsList.length === 1 ? "" : "s"} under this subject
-                          </p>
-                        </div>
+                {loadingAnalytics ? (
+                  <div className="p-12 text-center text-slate">Loading student performance analytics...</div>
+                ) : analytics ? (
+                  <div className="space-y-10">
+                    {/* Summary Scorecard Row */}
+                    <div className="grid sm:grid-cols-4 gap-6">
+                      <div className="border border-line bg-white p-6 text-center shadow-sm">
+                        <span className="text-xs text-slate uppercase block font-mono">Total Tests Taken</span>
+                        <span className="font-serif text-3xl font-bold text-indigo mt-2 block">{analytics.total_tests}</span>
                       </div>
-
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => toggleSubjectSelection(subj.id)}
-                          className={`px-3 py-1.5 border text-xs font-medium transition-all ${
-                            isSubjectSelected
-                              ? "bg-indigo/10 border-indigo text-indigo font-bold"
-                              : "bg-white border-line text-slate hover:border-ink"
-                          }`}
-                        >
-                          {isSubjectSelected ? "✓ Subject Selected" : "Select Entire Subject"}
-                        </button>
-
-                        <button
-                          onClick={() =>
-                            startTest({
-                              title: `Full ${subj.name} Subject Test`,
-                              mode: "subject",
-                              subjectIds: [subj.id],
-                              count: 25,
-                            })
-                          }
-                          disabled={loadingTest}
-                          className="px-4 py-1.5 bg-ink text-paper text-xs font-medium hover:bg-indigo transition-colors disabled:opacity-50"
-                        >
-                          📘 Take Full Subject Test
-                        </button>
+                      <div className="border border-line bg-white p-6 text-center shadow-sm">
+                        <span className="text-xs text-slate uppercase block font-mono">Average Score %</span>
+                        <span className="font-serif text-3xl font-bold text-emerald-600 mt-2 block">
+                          {analytics.average_percentage}%
+                        </span>
+                      </div>
+                      <div className="border border-line bg-white p-6 text-center shadow-sm">
+                        <span className="text-xs text-slate uppercase block font-mono">Overall Accuracy</span>
+                        <span className="font-serif text-3xl font-bold text-ink mt-2 block">
+                          {analytics.overall_accuracy}%
+                        </span>
+                      </div>
+                      <div className="border border-line bg-white p-6 text-center shadow-sm">
+                        <span className="text-xs text-slate uppercase block font-mono">Exam Readiness Index</span>
+                        <span className="font-serif text-3xl font-bold text-amber mt-2 block">
+                          {analytics.readiness_index}/100
+                        </span>
+                        <span className="text-[10px] text-slate mt-1 block leading-tight">{analytics.readiness_label}</span>
                       </div>
                     </div>
 
-                    {topicsList.length > 0 ? (
-                      <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
-                        {topicsList.map((top) => {
-                          const isChecked = selectedTopicIds.includes(top.id);
-                          return (
-                            <div
-                              key={top.id}
-                              className={`p-4 border transition-all flex flex-col justify-between ${
-                                isChecked
-                                  ? "border-indigo bg-indigo/10 text-indigo shadow-sm ring-1 ring-indigo"
-                                  : "border-line bg-white text-ink hover:border-ink"
-                              }`}
-                            >
-                              <div className="flex items-start justify-between gap-2 mb-3">
-                                <span className="font-semibold text-sm leading-snug text-ink">{top.name}</span>
-                                <input
-                                  type="checkbox"
-                                  checked={isChecked}
-                                  onChange={() => toggleTopicSelection(top.id, subj.id)}
-                                  className="w-4 h-4 accent-indigo cursor-pointer mt-0.5"
-                                />
-                              </div>
-
-                              <button
-                                onClick={() =>
-                                  startTest({
-                                    title: `Topic Test: ${top.name}`,
-                                    mode: "topic",
-                                    topicIds: [top.id],
-                                    count: 10,
-                                  })
-                                }
-                                disabled={loadingTest}
-                                className="mt-2 w-full py-1.5 border border-indigo/30 bg-white text-indigo hover:bg-indigo hover:text-paper text-xs font-medium transition-colors"
-                              >
-                                🎯 Take Topic Test (10 Qs)
-                              </button>
-                            </div>
-                          );
-                        })}
+                    {/* VISUAL SCORE TRAJECTORY GRAPH */}
+                    <div className="border border-line bg-white p-6 shadow-sm">
+                      <div className="flex items-center justify-between border-b border-line pb-4 mb-6">
+                        <div>
+                          <h2 className="font-serif text-xl font-bold text-ink">Score Performance Trajectory Graph</h2>
+                          <p className="text-xs text-slate">Historical score percentage across past test attempts</p>
+                        </div>
                       </div>
-                    ) : (
-                      <div className="p-6 border border-dashed border-line bg-white text-center text-xs text-slate">
-                        No topics added to {subj.name} yet. Admins can add topics in the Knowledge Base Hub.
+
+                      {analytics.score_history.length > 0 ? (
+                        <div className="h-64 w-full flex items-end gap-4 pt-8 pb-4 px-2 border-b border-line bg-paper/50 relative">
+                          {analytics.score_history.map((item, idx) => {
+                            const heightPct = Math.max(10, Math.min(100, item.percentage));
+                            return (
+                              <div key={item.id || idx} className="flex-1 flex flex-col items-center h-full justify-end group relative">
+                                <div className="absolute -top-12 hidden group-hover:block bg-ink text-paper text-[10px] p-2 rounded shadow-lg whitespace-nowrap z-20">
+                                  <strong>{item.test_title}</strong><br />
+                                  Score: {item.score} ({item.percentage}%) | Accuracy: {item.accuracy}%
+                                </div>
+
+                                <span className="text-[11px] font-bold text-indigo mb-1">{item.percentage}%</span>
+                                <div
+                                  style={{ height: `${heightPct}%` }}
+                                  className="w-full bg-gradient-to-t from-indigo to-indigo/70 rounded-t transition-all group-hover:from-emerald-600 group-hover:to-emerald-400"
+                                ></div>
+                                <span className="text-[10px] text-slate truncate w-full text-center mt-2">
+                                  {item.date}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="p-8 text-center text-xs text-slate bg-paper">
+                          Take your first CBT practice test to view your performance trajectory graph.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* SUBJECT MASTERY BREAKDOWN */}
+                    <div className="grid lg:grid-cols-2 gap-8">
+                      <div className="border border-line bg-white p-6 shadow-sm">
+                        <h2 className="font-serif text-xl font-bold text-ink mb-4 pb-2 border-b border-line">
+                          Subject Accuracy & Mastery Meters
+                        </h2>
+                        <div className="space-y-5">
+                          {analytics.subject_breakdown.map((sb) => (
+                            <div key={sb.subject_name}>
+                              <div className="flex justify-between text-xs font-semibold text-ink mb-1.5">
+                                <span>{sb.subject_name}</span>
+                                <span className="text-indigo">{sb.accuracy}% Accuracy</span>
+                              </div>
+                              <div className="w-full bg-line h-3 rounded-full overflow-hidden">
+                                <div
+                                  style={{ width: `${Math.min(100, sb.accuracy)}%` }}
+                                  className="bg-indigo h-full transition-all"
+                                ></div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="border border-line bg-white p-6 shadow-sm">
+                        <h2 className="font-serif text-xl font-bold text-ink mb-4 pb-2 border-b border-line">
+                          AI Topic Insights & Recommendations
+                        </h2>
+                        <div className="space-y-4 text-xs">
+                          <div className="p-4 bg-amber-50 border border-amber-200">
+                            <strong className="text-amber-900 font-bold block mb-1">⚠️ Focus Areas (Weak Topics):</strong>
+                            <ul className="list-disc pl-4 space-y-1 text-amber-800">
+                              {analytics.weak_topics.map((t) => (
+                                <li key={t}>{t}</li>
+                              ))}
+                            </ul>
+                          </div>
+
+                          <div className="p-4 bg-emerald-50 border border-emerald-200">
+                            <strong className="text-emerald-900 font-bold block mb-1">✅ High Mastery Topics:</strong>
+                            <ul className="list-disc pl-4 space-y-1 text-emerald-800">
+                              {analytics.strong_topics.map((t) => (
+                                <li key={t}>{t}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : activeTab === "download_papers" ? (
+              /* TAB 3: TEACHER & STUDENT MOCK PAPER DOWNLOADER */
+              <div className="border border-line bg-white p-8 shadow-md">
+                <div className="border-b border-line pb-6 mb-8 flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <h1 className="font-serif text-3xl font-bold text-ink">Teacher & Student Mock Paper Downloader</h1>
+                    <p className="text-slate text-sm mt-1">
+                      Select exam material, topic scope, and difficulty level. Generate 2 distinct printable documents: (1) Test Question Paper for students, and (2) Master Answer Key & Solutions Paper for teachers.
+                    </p>
+                  </div>
+                  <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 px-3 py-1.5 rounded text-xs font-bold flex items-center gap-1.5">
+                    <span>🔒 Grounded RAG Generation</span>
+                    <span className="text-[10px] bg-emerald-700 text-white px-1.5 py-0.5 rounded">Textbooks & PYQs Only</span>
+                  </div>
+                </div>
+
+                {/* Config Form */}
+                <div className="space-y-6 mb-8 bg-paper p-6 border border-line">
+                  <div className="grid sm:grid-cols-2 gap-6">
+                    {/* 1. Target Exam */}
+                    <div>
+                      <label className="text-xs font-bold text-ink uppercase block mb-2">1. Target Exam / Knowledge Base Source</label>
+                      <select
+                        value={mockExamId}
+                        onChange={(e) => {
+                          setMockExamId(e.target.value);
+                          setMockSelectedTopics([]);
+                        }}
+                        className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none font-semibold"
+                      >
+                        <option value="all">All Exams Knowledge Base</option>
+                        {knowledgeBaseExams.map((ex) => (
+                          <option key={ex.id} value={ex.id}>
+                            {ex.name} ({ex.code}) - [{ex.document_count || 0} Textbooks/PYQs]
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 2. Paper Title */}
+                    <div>
+                      <label className="text-xs font-bold text-ink uppercase block mb-2">2. Paper Title</label>
+                      <input
+                        type="text"
+                        value={mockPaperTitle}
+                        onChange={(e) => setMockPaperTitle(e.target.value)}
+                        className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
+                        placeholder="e.g. NEET All India Mock Test"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-6">
+                    {/* 3. Number of Questions */}
+                    <div>
+                      <label className="text-xs font-bold text-ink uppercase block mb-2">3. Total Number of Questions</label>
+                      <select
+                        value={mockPaperCount}
+                        onChange={(e) => setMockPaperCount(Number(e.target.value))}
+                        className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
+                      >
+                        <option value={10}>10 Questions (Quick Quiz)</option>
+                        <option value={15}>15 Questions (Classroom Unit Test)</option>
+                        <option value={30}>30 Questions (Standard Subject Mock)</option>
+                        <option value={45}>45 Questions (NEET Single Subject Mock)</option>
+                        <option value={60}>60 Questions (KCET Full Subject Mock)</option>
+                        <option value={90}>90 Questions (JEE Main Mock Paper)</option>
+                        <option value={180}>180 Questions (Full Length NEET Paper)</option>
+                        <option value={200}>200 Questions (Full NEET Pattern Paper)</option>
+                      </select>
+                    </div>
+
+                    {/* 4. Question Difficulty Level */}
+                    <div>
+                      <label className="text-xs font-bold text-ink uppercase block mb-2">4. Question Difficulty Level</label>
+                      <select
+                        value={mockDifficulty}
+                        onChange={(e) => setMockDifficulty(e.target.value)}
+                        className="w-full border border-line bg-white px-3 py-2 text-sm text-ink focus:outline-none"
+                      >
+                        <option value="mixed">Mixed (Exam Blueprint Standard: 30% Easy, 50% Medium, 20% Hard)</option>
+                        <option value="easy">Easy Level Questions Only</option>
+                        <option value="moderate">Moderate / Medium Level Questions Only</option>
+                        <option value="difficult">Difficult / Hard Level Questions Only</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* 5. Topic Scope Selection */}
+                  <div className="border-t border-line pt-4">
+                    <label className="text-xs font-bold text-ink uppercase block mb-2">5. Syllabus / Topic Scope Selection</label>
+                    <div className="flex items-center gap-6 mb-4">
+                      <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                        <input
+                          type="radio"
+                          name="topicScope"
+                          checked={mockTopicScope === "all"}
+                          onChange={() => {
+                            setMockTopicScope("all");
+                            setMockSelectedTopics([]);
+                          }}
+                          className="accent-indigo"
+                        />
+                        All Topics (Complete Exam Syllabus)
+                      </label>
+                      <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                        <input
+                          type="radio"
+                          name="topicScope"
+                          checked={mockTopicScope === "selected"}
+                          onChange={() => setMockTopicScope("selected")}
+                          className="accent-indigo"
+                        />
+                        Specific Selected Topics / Chapters
+                      </label>
+                    </div>
+
+                    {/* Dynamic Topic Picker */}
+                    {mockTopicScope === "selected" && (
+                      <div className="p-4 bg-white border border-line max-h-60 overflow-y-auto space-y-4">
+                        {availableKnowledgeTopics.length === 0 ? (
+                          <p className="text-xs text-slate">No specific topics configured for this exam yet. All topics will be used.</p>
+                        ) : (
+                          availableKnowledgeTopics.map((chap) => (
+                            <div key={chap.id} className="space-y-1.5">
+                              <span className="text-xs font-bold text-indigo uppercase block">{chap.name}</span>
+                              <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                {chap.topics.map((tp: any) => (
+                                  <label key={tp.id} className="flex items-center gap-2 text-xs text-slate hover:text-ink cursor-pointer bg-paper p-2 border border-line">
+                                    <input
+                                      type="checkbox"
+                                      checked={mockSelectedTopics.includes(tp.id)}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setMockSelectedTopics([...mockSelectedTopics, tp.id]);
+                                        } else {
+                                          setMockSelectedTopics(mockSelectedTopics.filter((tId) => tId !== tp.id));
+                                        }
+                                      }}
+                                      className="accent-indigo"
+                                    />
+                                    <span className="truncate">{tp.name}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            </div>
+                          ))
+                        )}
                       </div>
                     )}
-                  </section>
-                );
-              })}
-            </div>
+                  </div>
+
+                  {/* 6. Source Material Restriction Banner */}
+                  <div className="bg-indigo/10 border border-indigo/20 p-3 rounded flex items-center justify-between text-xs text-indigo">
+                    <span className="font-semibold">📚 Generation Constraint:</span>
+                    <span>Questions generated strictly from Textbooks & Previous Years Question Papers in Knowledge Base.</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={generateMockPaperPackage}
+                  disabled={generatingMockPackage}
+                  className="w-full bg-indigo text-paper py-3.5 font-medium text-sm hover:bg-ink transition-colors shadow mb-8 disabled:opacity-50"
+                >
+                  {generatingMockPackage ? "Extracting Grounded Questions & Rendering Papers Package..." : "⚡ Generate 2 Mock Papers Package (Strict Grounded RAG)"}
+                </button>
+
+                {/* Generated Papers Download Buttons */}
+                {mockPackage && (
+                  <div className="p-6 border border-indigo/30 bg-indigo/5 space-y-6">
+                    <div className="border-b border-line pb-3">
+                      <h3 className="font-serif text-xl font-bold text-ink">Package Ready for Download & Printing</h3>
+                      <p className="text-xs text-slate mt-1">
+                        {mockPackage.title} ({mockPackage.total_questions} Questions)
+                      </p>
+                    </div>
+
+                    <div className="grid sm:grid-cols-2 gap-6">
+                      {/* Paper 1: Test Paper */}
+                      <div className="border border-line bg-white p-6 shadow-sm flex flex-col justify-between">
+                        <div>
+                          <span className="text-3xl mb-2 block">📄</span>
+                          <h4 className="font-serif text-lg font-bold text-ink">1. Test Question Paper</h4>
+                          <p className="text-xs text-slate leading-relaxed mb-6 mt-1">
+                            Clean student test paper with instructions, question list, multiple-choice options, and printable OMR answer bubble grid.
+                          </p>
+                        </div>
+                        <button
+                          onClick={printTestPaperOnly}
+                          className="w-full bg-emerald-600 text-paper py-2.5 text-xs font-bold hover:bg-emerald-700 transition-colors shadow"
+                        >
+                          📥 Download / Print Test Paper (Questions Only)
+                        </button>
+                      </div>
+
+                      {/* Paper 2: Answer Key & Solutions Paper */}
+                      <div className="border border-line bg-white p-6 shadow-sm flex flex-col justify-between">
+                        <div>
+                          <span className="text-3xl mb-2 block">🔑</span>
+                          <h4 className="font-serif text-lg font-bold text-ink">2. Master Key & Solutions Paper</h4>
+                          <p className="text-xs text-slate leading-relaxed mb-6 mt-1">
+                            Teacher evaluation paper with complete master answer key matrix and grounded step-by-step solutions for every question.
+                          </p>
+                        </div>
+                        <button
+                          onClick={printKeyAnswerPaperOnly}
+                          className="w-full bg-indigo text-paper py-2.5 text-xs font-bold hover:bg-ink transition-colors shadow"
+                        >
+                          🔑 Download / Print Answer Key & Solutions Paper
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* TAB 1: MAIN CBT PRACTICE TESTS VIEW */
+              <div className="space-y-6">
+                {/* ACTIVE EXAM HERO BANNER */}
+                <div className="border border-line bg-gradient-to-r from-ink via-ink/95 to-indigo p-6 text-paper shadow-md">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="bg-amber text-ink text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded">
+                          ACTIVE EXAM HUB: {activePattern.code}
+                        </span>
+                        <span className="bg-paper/20 text-paper text-[11px] font-medium px-2 py-0.5 rounded">
+                          {activePattern.markingScheme}
+                        </span>
+                      </div>
+                      <h1 className="font-serif text-3xl font-bold text-paper">{activePattern.name}</h1>
+                      <p className="text-paper/80 text-xs mt-1 max-w-2xl leading-relaxed">
+                        {activePattern.description}
+                      </p>
+                    </div>
+
+                    <div className="bg-paper/10 border border-paper/20 p-3 rounded text-right">
+                      <span className="text-[10px] uppercase block text-paper/70 font-mono">Training Mode</span>
+                      <span className="font-serif text-lg font-bold text-amber capitalize">{difficulty} Level</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* PRACTICE TYPE CARDS */}
+                <div className="grid sm:grid-cols-3 gap-6">
+                  <div className="border border-line bg-paper p-6 shadow-sm flex flex-col justify-between hover:border-indigo transition-colors">
+                    <div>
+                      <span className="text-2xl mb-2 block">🎯</span>
+                      <h3 className="font-serif text-lg font-bold text-ink mb-1">{activePattern.code} Full Mock Test</h3>
+                      <p className="text-xs text-slate leading-relaxed mb-4">
+                        Full-length mock paper timed according to {activePattern.code} official exam blueprint.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() =>
+                        startTest({
+                          title: `${activePattern.code} Full-Length CBT Mock Test`,
+                          mode: "full_length",
+                          count: activePattern.totalQuestions > 90 ? 45 : 30,
+                          durationMins: 60,
+                        })
+                      }
+                      disabled={loadingTest}
+                      className="w-full bg-indigo text-paper py-2.5 text-xs font-medium hover:bg-ink transition-colors disabled:opacity-50 shadow-sm"
+                    >
+                      {loadingTest ? "Generating Test..." : `🚀 Launch ${activePattern.code} Mock Test`}
+                    </button>
+                  </div>
+
+                  <div className="border border-line bg-paper p-6 shadow-sm flex flex-col justify-between hover:border-indigo transition-colors">
+                    <div>
+                      <span className="text-2xl mb-2 block">📑</span>
+                      <h3 className="font-serif text-lg font-bold text-ink mb-1">Multiple Topic Test</h3>
+                      <p className="text-xs text-slate leading-relaxed mb-4">
+                        Select multiple topics using checkboxes under subject sections below to generate a tailored test paper.
+                      </p>
+                    </div>
+                    <button
+                      disabled={selectedTopicIds.length === 0 || loadingTest}
+                      onClick={() =>
+                        startTest({
+                          title: `${activePattern.code} Multi-Topic Practice Test (${selectedTopicIds.length} Topics)`,
+                          mode: "multi_topic",
+                          topicIds: selectedTopicIds,
+                          count: Math.min(50, Math.max(10, selectedTopicIds.length * 5)),
+                        })
+                      }
+                      className="w-full bg-ink text-paper py-2.5 text-xs font-medium hover:bg-indigo transition-colors disabled:opacity-50 shadow-sm"
+                    >
+                      {selectedTopicIds.length > 0
+                        ? `Launch Test (${selectedTopicIds.length} Topics Selected)`
+                        : "Select Topics Below to Enable"}
+                    </button>
+                  </div>
+
+                  <div className="border border-line bg-paper p-6 shadow-sm flex flex-col justify-between hover:border-indigo transition-colors">
+                    <div>
+                      <span className="text-2xl mb-2 block">⚙️</span>
+                      <h3 className="font-serif text-lg font-bold text-ink mb-1">Custom Practice Launcher</h3>
+                      <p className="text-xs text-slate leading-relaxed mb-4">
+                        Adjust question counts and target difficulty level for custom exam drills.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <select
+                        value={questionCount}
+                        onChange={(e) => setQuestionCount(Number(e.target.value))}
+                        className="w-1/2 border border-line bg-white px-2 py-1 text-xs text-ink focus:outline-none"
+                      >
+                        <option value={10}>10 Qs</option>
+                        <option value={25}>25 Qs</option>
+                        <option value={45}>45 Qs</option>
+                        <option value={90}>90 Qs</option>
+                      </select>
+                      <select
+                        value={difficulty}
+                        onChange={(e) => setDifficulty(e.target.value)}
+                        className="w-1/2 border border-line bg-white px-2 py-1 text-xs text-ink focus:outline-none"
+                      >
+                        <option value="mixed">Mixed</option>
+                        <option value="easy">Easy</option>
+                        <option value="moderate">Moderate</option>
+                        <option value="difficult">Difficult</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* SUBJECT CURRICULUM SECTIONS (FILTERED BY ACTIVE EXAM SIDEBAR ITEM) */}
+                <div className="space-y-8 pt-4">
+                  <div className="flex items-center justify-between border-b border-line pb-4">
+                    <div>
+                      <h2 className="font-serif text-2xl font-bold text-ink">
+                        {activePattern.code} Subject Curriculum ({displaySubjects.length} Sections)
+                      </h2>
+                      <p className="text-xs text-slate mt-0.5">
+                        Syllabus breakdown for {activeExamObj?.name || "Target Exam"}. Take individual topic tests or combine multiple topics.
+                      </p>
+                    </div>
+                  </div>
+
+                  {displaySubjects.map((subj, sIdx) => {
+                    const topicsList = subjectTopicsMap[subj.id] || [];
+                    const isSubjectSelected = selectedSubjectIds.includes(subj.id);
+
+                    return (
+                      <section key={subj.id} className="border border-line bg-paper p-6 shadow-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-4 mb-6">
+                          <div className="flex items-center gap-3">
+                            <span className="flex items-center justify-center w-8 h-8 rounded-full bg-indigo text-paper text-sm font-bold font-serif">
+                              {sIdx + 1}
+                            </span>
+                            <div>
+                              <h3 className="font-serif text-xl font-bold text-ink">
+                                Section {sIdx + 1}: {subj.name}
+                              </h3>
+                              <p className="text-xs text-slate">
+                                {topicsList.length} approved topic{topicsList.length === 1 ? "" : "s"} under this subject
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => toggleSubjectSelection(subj.id)}
+                              className={`px-3 py-1.5 border text-xs font-medium transition-all ${
+                                isSubjectSelected
+                                  ? "bg-indigo/10 border-indigo text-indigo font-bold"
+                                  : "bg-white border-line text-slate hover:border-ink"
+                              }`}
+                            >
+                              {isSubjectSelected ? "✓ Subject Selected" : "Select Entire Subject"}
+                            </button>
+
+                            <button
+                              onClick={() =>
+                                startTest({
+                                  title: `Full ${subj.name} Subject Test (${activePattern.code})`,
+                                  mode: "subject",
+                                  subjectIds: [subj.id],
+                                  count: 25,
+                                })
+                              }
+                              disabled={loadingTest}
+                              className="px-4 py-1.5 bg-ink text-paper text-xs font-medium hover:bg-indigo transition-colors disabled:opacity-50"
+                            >
+                              📘 Take Full Subject Test
+                            </button>
+                          </div>
+                        </div>
+
+                        {topicsList.length > 0 ? (
+                          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
+                            {topicsList.map((top) => {
+                              const isChecked = selectedTopicIds.includes(top.id);
+                              return (
+                                <div
+                                  key={top.id}
+                                  className={`p-4 border transition-all flex flex-col justify-between ${
+                                    isChecked
+                                      ? "border-indigo bg-indigo/10 text-indigo shadow-sm ring-1 ring-indigo"
+                                      : "border-line bg-white text-ink hover:border-ink"
+                                  }`}
+                                >
+                                  <div className="flex items-start justify-between gap-2 mb-3">
+                                    <span className="font-semibold text-sm leading-snug text-ink">{top.name}</span>
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => toggleTopicSelection(top.id, subj.id)}
+                                      className="w-4 h-4 accent-indigo cursor-pointer mt-0.5"
+                                    />
+                                  </div>
+
+                                  <button
+                                    onClick={() =>
+                                      startTest({
+                                        title: `${activePattern.code} Topic Test: ${top.name}`,
+                                        mode: "topic",
+                                        topicIds: [top.id],
+                                        count: 10,
+                                      })
+                                    }
+                                    disabled={loadingTest}
+                                    className="mt-2 w-full py-1.5 border border-indigo/30 bg-white text-indigo hover:bg-indigo hover:text-paper text-xs font-medium transition-colors"
+                                  >
+                                    🎯 Take Topic Test (10 Qs)
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="p-6 border border-dashed border-line bg-white text-center text-xs text-slate">
+                            No topics added to {subj.name} yet. Admins can add topics in the Knowledge Base Hub.
+                          </div>
+                        )}
+                      </section>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
-        )
+        </div>
       )}
     </main>
   );
