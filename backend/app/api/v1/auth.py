@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_student
 from app.core.config import get_settings
-from app.core.email import send_otp_email, background_send_otp_email
+from app.core.email import send_otp_email_sync, background_send_otp_email
 from app.core.otp import OTPPurpose, generate_and_store_otp, verify_otp
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.models.admin import AdminUser
@@ -44,7 +44,10 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
-async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(
+    payload: RegisterRequest,
+    db: AsyncSession = Depends(get_db),
+):
     try:
         clean_name = payload.name.strip()
         clean_email = payload.email.lower().strip()
@@ -85,7 +88,7 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
 
         await db.commit()
 
-        # Generate and email signup OTP
+        # Generate and email signup OTP via background OS thread
         otp = await generate_and_store_otp(clean_email, OTPPurpose.SIGNUP, db=db)
         background_send_otp_email(clean_email, otp, "signup verification")
 
@@ -99,7 +102,10 @@ async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(
+    payload: LoginRequest,
+    db: AsyncSession = Depends(get_db),
+):
     identifier = (payload.name or payload.email or "").strip()
     if not identifier:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Student name or email is required.")
@@ -141,7 +147,10 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/request-login-otp", response_model=MessageResponse)
-async def request_login_otp(payload: RequestLoginOTPRequest, db: AsyncSession = Depends(get_db)):
+async def request_login_otp(
+    payload: RequestLoginOTPRequest,
+    db: AsyncSession = Depends(get_db),
+):
     clean_email = payload.email.lower().strip()
     result = await db.execute(select(Student).where(func.lower(Student.email) == clean_email))
     student = result.scalar_one_or_none()
@@ -187,7 +196,6 @@ async def verify_login_otp(payload: VerifyLoginOTPRequest, db: AsyncSession = De
     return TokenResponse(access_token=token)
 
 
-
 @router.post("/admin/login", response_model=TokenResponse)
 async def admin_login(payload: AdminLoginRequest, db: AsyncSession = Depends(get_db)):
     clean_id = payload.identifier.strip()
@@ -197,7 +205,6 @@ async def admin_login(payload: AdminLoginRequest, db: AsyncSession = Depends(get
     if clean_id.lower() != admin_target.lower() or payload.password != admin_pass:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid admin ID or password.")
 
-    # Find or seed admin user record in dedicated admins table
     result = await db.execute(
         select(AdminUser).where(func.lower(AdminUser.admin_id) == admin_target.lower())
     )
@@ -222,7 +229,6 @@ async def admin_login(payload: AdminLoginRequest, db: AsyncSession = Depends(get
     return TokenResponse(access_token=token)
 
 
-
 @router.post("/verify-signup-otp", response_model=TokenResponse)
 async def verify_signup_otp(payload: VerifySignupOTPRequest, db: AsyncSession = Depends(get_db)):
     clean_email = payload.email.lower().strip()
@@ -244,7 +250,10 @@ async def verify_signup_otp(payload: VerifySignupOTPRequest, db: AsyncSession = 
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
-async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
     clean_email = payload.email.lower().strip()
     result = await db.execute(select(Student).where(func.lower(Student.email) == clean_email))
     student = result.scalar_one_or_none()
@@ -253,7 +262,6 @@ async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Dep
         otp = await generate_and_store_otp(clean_email, OTPPurpose.RESET_PASSWORD, db=db)
         background_send_otp_email(clean_email, otp, "password reset")
 
-    # Generic response to prevent email enumeration
     return MessageResponse(
         message="If an account exists for this email, a password reset code has been sent."
     )
@@ -279,7 +287,10 @@ async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depen
 
 
 @router.post("/resend-otp", response_model=MessageResponse)
-async def resend_otp(payload: ResendOTPRequest, db: AsyncSession = Depends(get_db)):
+async def resend_otp(
+    payload: ResendOTPRequest,
+    db: AsyncSession = Depends(get_db),
+):
     clean_email = payload.email.lower().strip()
     result = await db.execute(select(Student).where(func.lower(Student.email) == clean_email))
     student = result.scalar_one_or_none()
@@ -307,6 +318,5 @@ async def get_me(current_student: Student = Depends(get_current_student)):
 @router.post("/test-email", response_model=MessageResponse)
 async def send_test_email(to_email: str = "kushalyngowda136@gmail.com"):
     """Dispatches a test email via configured Gmail SMTP server."""
-    await send_otp_email(to_email, "998877", "SamAI Production Test Email")
+    background_send_otp_email(to_email, "998877", "SamAI Production Test Email")
     return MessageResponse(message=f"Test email dispatched to {to_email}. Please check your inbox.")
-

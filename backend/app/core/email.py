@@ -1,14 +1,12 @@
 import asyncio
 import smtplib
+import threading
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from app.core.config import get_settings
 
 settings = get_settings()
-
-_background_email_tasks: set[asyncio.Task] = set()
 
 
 def _mask_email(email: str) -> str:
@@ -23,25 +21,26 @@ def _mask_email(email: str) -> str:
     return f"{masked_local}@{domain}"
 
 
-def background_send_otp_email(to_email: str, otp: str, purpose_label: str) -> None:
-    """Launches send_otp_email in background with a strong Task reference to prevent GC eviction."""
-    task = asyncio.create_task(send_otp_email(to_email, otp, purpose_label))
-    _background_email_tasks.add(task)
-    task.add_done_callback(_background_email_tasks.discard)
-
-
-async def send_otp_email(to_email: str, otp: str, purpose_label: str) -> None:
+def send_otp_email_sync(to_email: str, otp: str, purpose_label: str) -> bool:
     """
-    Delivers OTP email using FastAPI-Mail (the Python equivalent of PHPMailer in PHP),
-    featuring automatic dual-port fallback (Port 587 STARTTLS -> Port 465 SSL/TLS -> smtplib).
+    Synchronous direct SMTP email dispatch using Python standard library smtplib.
+    Features dual-port fallback (Port 587 STARTTLS -> Port 465 SSL/TLS).
+    Guaranteed non-blocking execution when wrapped in background threads.
     """
     clean_to_email = to_email.strip().lower()
     masked_target = _mask_email(clean_to_email)
     log_otp = otp if settings.ENVIRONMENT == "development" else "******"
 
-    print("\n" + "=" * 60)
-    print(f"[FASTAPI-MAIL DISPATCH] Target: {masked_target} | Purpose: {purpose_label} | OTP: {log_otp}")
-    print("=" * 60 + "\n")
+    print("\n" + "=" * 60, flush=True)
+    print(f"[EMAIL DISPATCH START] Target: {masked_target} | Purpose: {purpose_label} | OTP: {log_otp}", flush=True)
+    print("=" * 60 + "\n", flush=True)
+
+    username = settings.MAIL_USERNAME.strip() if settings.MAIL_USERNAME else ""
+    password = settings.MAIL_PASSWORD.strip().replace(" ", "") if settings.MAIL_PASSWORD else ""
+
+    if not username or not password:
+        print(f"[EMAIL NOTICE] No MAIL_USERNAME or MAIL_PASSWORD configured. OTP logged above: {otp}", flush=True)
+        return False
 
     minutes = settings.OTP_EXPIRE_SECONDS // 60
     subject = f"SamAI — Your {purpose_label} OTP Verification Code"
@@ -62,99 +61,51 @@ async def send_otp_email(to_email: str, otp: str, purpose_label: str) -> None:
     </div>
     """
 
-    username = settings.MAIL_USERNAME.strip() if settings.MAIL_USERNAME else ""
-    password = settings.MAIL_PASSWORD.strip().replace(" ", "") if settings.MAIL_PASSWORD else ""
-
-    if not username or not password:
-        print("[FASTAPI-MAIL NOTICE] No MAIL_USERNAME or MAIL_PASSWORD configured. OTP logged above.")
-        return
+    from_name = settings.MAIL_FROM_NAME or "SamAI Portal"
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{from_name} <{username}>"
+    msg["To"] = clean_to_email
+    msg.attach(MIMEText(html_body, "html"))
 
     server_host = settings.MAIL_SERVER or "smtp.gmail.com"
-    primary_port = settings.MAIL_PORT or 587
-    from_name = settings.MAIL_FROM_NAME or "SamAI Portal"
 
-    # Attempt 1: Send via FastAPI-Mail (Primary configured port & protocol)
+    # Strategy 1: Port 587 STARTTLS
     try:
-        use_tls = True if primary_port != 465 else False
-        use_ssl = True if primary_port == 465 else False
+        with smtplib.SMTP(server_host, 587, timeout=12) as s:
+            s.ehlo()
+            s.starttls()
+            s.ehlo()
+            s.login(username, password)
+            s.sendmail(username, [clean_to_email], msg.as_string())
+        print(f"[EMAIL SUCCESS] Delivered OTP email to {masked_target} via SMTP Port 587!", flush=True)
+        return True
+    except Exception as err587:
+        print(f"[EMAIL PORT 587 NOTICE] Port 587 failed for {masked_target}: {err587}. Trying Port 465 SSL...", flush=True)
 
-        conf = ConnectionConfig(
-            MAIL_USERNAME=username,
-            MAIL_PASSWORD=password,
-            MAIL_FROM=username,
-            MAIL_PORT=primary_port,
-            MAIL_SERVER=server_host,
-            MAIL_FROM_NAME=from_name,
-            MAIL_STARTTLS=use_tls,
-            MAIL_SSL_TLS=use_ssl,
-            USE_CREDENTIALS=True,
-            VALIDATE_CERTS=True,
-        )
-
-        message = MessageSchema(
-            subject=subject,
-            recipients=[clean_to_email],
-            body=html_body,
-            subtype=MessageType.html,
-        )
-
-        fm = FastMail(conf)
-        await fm.send_message(message)
-        print(f"[FASTAPI-MAIL SUCCESS] Delivered email successfully to {masked_target} via port {primary_port}!")
-        return
-    except Exception as primary_err:
-        print(f"[FASTAPI-MAIL NOTICE] Primary port {primary_port} failed for {masked_target}: {primary_err}. Trying fallback port...")
-
-    # Attempt 2: Dual-Port Fallback (If 587 failed, try 465 SSL/TLS; if 465 failed, try 587 STARTTLS)
-    fallback_port = 465 if primary_port != 465 else 587
+    # Strategy 2: Port 465 SSL/TLS
     try:
-        use_tls_fb = True if fallback_port != 465 else False
-        use_ssl_fb = True if fallback_port == 465 else False
+        with smtplib.SMTP_SSL(server_host, 465, timeout=12) as s:
+            s.ehlo()
+            s.login(username, password)
+            s.sendmail(username, [clean_to_email], msg.as_string())
+        print(f"[EMAIL SUCCESS] Delivered OTP email to {masked_target} via SMTP Port 465 SSL!", flush=True)
+        return True
+    except Exception as err465:
+        print(f"[EMAIL CRITICAL ERROR] All SMTP delivery attempts failed for {masked_target}: {err465}", flush=True)
+        return False
 
-        conf_fb = ConnectionConfig(
-            MAIL_USERNAME=username,
-            MAIL_PASSWORD=password,
-            MAIL_FROM=username,
-            MAIL_PORT=fallback_port,
-            MAIL_SERVER=server_host,
-            MAIL_FROM_NAME=from_name,
-            MAIL_STARTTLS=use_tls_fb,
-            MAIL_SSL_TLS=use_ssl_fb,
-            USE_CREDENTIALS=True,
-            VALIDATE_CERTS=True,
-        )
 
-        message_fb = MessageSchema(
-            subject=subject,
-            recipients=[clean_to_email],
-            body=html_body,
-            subtype=MessageType.html,
-        )
+def background_send_otp_email(to_email: str, otp: str, purpose_label: str) -> None:
+    """Launches send_otp_email_sync immediately in a dedicated background Thread with flush logging."""
+    t = threading.Thread(
+        target=send_otp_email_sync,
+        args=(to_email, otp, purpose_label),
+        daemon=True,
+    )
+    t.start()
 
-        fm_fb = FastMail(conf_fb)
-        await fm_fb.send_message(message_fb)
-        print(f"[FASTAPI-MAIL FALLBACK SUCCESS] Delivered email successfully to {masked_target} via fallback port {fallback_port}!")
-        return
-    except Exception as fb_err:
-        print(f"[FASTAPI-MAIL FALLBACK ERROR] Fallback port {fallback_port} failed for {masked_target}: {fb_err}.")
 
-    # Attempt 3: Synchronous smtplib fallback (worker thread)
-    try:
-        def _sync_fallback():
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = f"{from_name} <{username}>"
-            msg["To"] = clean_to_email
-            msg.attach(MIMEText(html_body, "html"))
-
-            with smtplib.SMTP(server_host, 587, timeout=15) as s:
-                s.ehlo()
-                s.starttls()
-                s.ehlo()
-                s.login(username, password)
-                s.sendmail(username, [clean_to_email], msg.as_string())
-
-        await asyncio.to_thread(_sync_fallback)
-        print(f"[SMTP FALLBACK SUCCESS] Delivered email via smtplib fallback to {masked_target}!")
-    except Exception as final_err:
-        print(f"[EMAIL DISPATCH CRITICAL ERROR] All email dispatch attempts failed for {masked_target}: {final_err}. OTP logged above.")
+async def send_otp_email(to_email: str, otp: str, purpose_label: str) -> None:
+    """Async wrapper around send_otp_email_sync."""
+    await asyncio.to_thread(send_otp_email_sync, to_email, otp, purpose_label)
