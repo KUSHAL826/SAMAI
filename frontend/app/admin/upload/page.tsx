@@ -180,16 +180,34 @@ export default function AdminKnowledgeBasePage() {
       .catch(() => setChapters([]));
   }, [newChapterSubjectId, selectedSubjectId]);
 
-  // Cascade Topics when Chapter changes
+  // Auto-sync selectedSubjectId when selectedExamIds change for dynamic workflow
   useEffect(() => {
-    if (!newTopicChapterId) {
-      setTopics([]);
-      return;
+    if (selectedExamIds.length > 0 && subjects.length > 0) {
+      const validSubjs = subjects.filter((s) => selectedExamIds.includes(s.exam_type_id));
+      if (validSubjs.length > 0) {
+        if (!selectedSubjectId || !validSubjs.some((s) => s.id === selectedSubjectId)) {
+          setSelectedSubjectId(validSubjs[0].id);
+        }
+      } else {
+        setSelectedSubjectId("");
+      }
     }
-    api.get<Topic[]>(`/api/v1/admin/topics?chapter_id=${newTopicChapterId}`, true)
-      .then(setTopics)
-      .catch(() => setTopics([]));
-  }, [newTopicChapterId]);
+  }, [selectedExamIds, subjects]);
+
+  // Cascade Topics when Subject or Chapter changes
+  useEffect(() => {
+    if (selectedSubjectId) {
+      api.get<Topic[]>(`/api/v1/admin/topics?subject_id=${selectedSubjectId}`, true)
+        .then((data) => setTopics(data))
+        .catch(() => setTopics([]));
+    } else if (newTopicChapterId) {
+      api.get<Topic[]>(`/api/v1/admin/topics?chapter_id=${newTopicChapterId}`, true)
+        .then((data) => setTopics(data))
+        .catch(() => setTopics([]));
+    } else {
+      setTopics([]);
+    }
+  }, [selectedSubjectId, newTopicChapterId]);
 
   // --- DELETION HANDLERS FOR ADMIN ---
   async function handleDeleteExam(id: string, name: string) {
@@ -998,9 +1016,7 @@ export default function AdminKnowledgeBasePage() {
                           Select Topic Name <span className="text-red-600 font-bold">* Mandatory</span>
                         </label>
                         {(() => {
-                          const chapsForSub = chapters.filter((c) => c.subject_id === selectedSubjectId);
-                          const subTopics = topics.filter((t) => chapsForSub.some((c) => c.id === t.chapter_id));
-                          const listToUse = subTopics.length > 0 ? subTopics : topics;
+                          const listToUse = topics;
 
                           return (
                             <div className="space-y-2">
@@ -1011,11 +1027,15 @@ export default function AdminKnowledgeBasePage() {
                                 required
                               >
                                 <option value="">-- Select Added Topic from Dropdown --</option>
-                                {listToUse.map((t) => (
-                                  <option key={t.id} value={t.name}>
-                                    🎯 {t.name}
-                                  </option>
-                                ))}
+                                {listToUse.length === 0 ? (
+                                  <option value="" disabled>No topics added for this subject yet (type custom below)</option>
+                                ) : (
+                                  listToUse.map((t) => (
+                                    <option key={t.id} value={t.name}>
+                                      🎯 {t.name}
+                                    </option>
+                                  ))
+                                )}
                               </select>
 
                               <div className="pt-1">

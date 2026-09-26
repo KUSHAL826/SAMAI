@@ -260,9 +260,15 @@ async def create_topic(payload: TopicCreate, db: AsyncSession = Depends(get_db))
 
 
 @router.get("/topics", response_model=list[TopicOut])
-async def list_topics(chapter_id: uuid.UUID | None = None, db: AsyncSession = Depends(get_db)):
+async def list_topics(
+    chapter_id: uuid.UUID | None = None,
+    subject_id: uuid.UUID | None = None,
+    db: AsyncSession = Depends(get_db),
+):
     query = select(Topic)
     if chapter_id:
         query = query.where(Topic.chapter_id == chapter_id)
+    elif subject_id:
+        query = query.join(Chapter, Topic.chapter_id == Chapter.id).where(Chapter.subject_id == subject_id)
     result = await db.execute(query.order_by(Topic.order_index, Topic.name))
     return result.scalars().all()
