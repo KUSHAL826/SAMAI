@@ -355,30 +355,11 @@ async def create_mock_test(
             except Exception as gen_err:
                 print(f"[LLM RAG GENERATION NOTICE] {gen_err}")
 
-    # Fallback to guarantee instant completion
-    needed_final = count - len(questions_out)
-    if needed_final > 0:
-        sample_topics = ["Kinematics & Dynamics", "Thermodynamics & Heat Transfer", "Organic Reaction Mechanisms", "Cellular Biology & Genetics", "Calculus & Differential Equations"]
-        sample_diffs = ["easy", "moderate", "difficult"]
-        for i in range(needed_final):
-            q_id = str(uuid.uuid4())
-            t_name = sample_topics[i % len(sample_topics)]
-            diff_str = difficulty if difficulty != "mixed" else sample_diffs[i % len(sample_diffs)]
-            questions_out.append({
-                "id": q_id,
-                "question_text": f"Textbook Question {len(questions_out)+1} ({t_name}): What fundamental physical principle governs thermodynamics under constant temperature conditions?",
-                "options": {
-                    "A": "Boyle's Law (P1V1 = P2V2)",
-                    "B": "Charles's Law (V1/T1 = V2/T2)",
-                    "C": "Gay-Lussac's Law (P1/T1 = P2/T2)",
-                    "D": "Avogadro's Hypothesis (V1/n1 = V2/n2)",
-                },
-                "difficulty": diff_str,
-                "topic_id": str(topic_ids[0]) if topic_ids else None,
-                "subject_id": str(subject_ids[0]) if subject_ids else None,
-                "correct_answer": "A",
-                "explanation": "Boyle's Law states that at constant temperature, the volume of a given mass of dry gas is inversely proportional to its pressure.",
-            })
+    if len(questions_out) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No questions could be generated from uploaded content. Please upload textbooks, study materials, or PYQs for this topic/exam in the Admin Knowledge Base first.",
+        )
 
     random.shuffle(questions_out)
     selected_questions = questions_out[:count]

@@ -18,16 +18,14 @@ SAMPLE QUESTION PAPER INFORMATION:
 {sample_paper_information}
 
 RULES:
-1. Generate questions only from the approved content above.
-2. Do not introduce information outside the approved content.
+1. ABSOLUTE GROUNDING REQUIREMENT: Generate questions ONLY and EXCLUSIVELY from the APPROVED EDUCATIONAL CONTENT provided above (uploaded textbooks, study materials, and PYQs).
+2. STRICT CONSTRAINT: Do NOT introduce any external knowledge, outside facts, or generic questions that are not explicitly present in or directly derivable from the approved content.
 3. Match the requested difficulty level.
 4. Do not copy sample questions verbatim -- use them only to understand style and format.
 5. Ensure exactly one correct answer per question.
 6. Ensure all options are plausible and mutually exclusive.
 7. The explanation must agree with and be traceable to the approved content.
-8. If the approved content is insufficient to write a question at the
-   requested difficulty, do your best to write the clearest question the
-   content actually supports rather than inventing outside facts.
+8. If the approved content is insufficient to write a question at the requested difficulty, write only the clearest question the content actually supports rather than inventing outside facts.
 
 Return each question as a JSON object with exactly these fields:
 question, options (object with keys among "A","B","C","D"), correct_answer
